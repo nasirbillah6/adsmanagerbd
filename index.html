@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3157e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ads হিসাব ম্যানেজার v72 Ultimate Pro</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233157e8'/%3E%3Ctext x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial' font-size='24' font-weight='bold'%3EAds%3C/text%3E%3C/svg%3E">
+<style>
+  .perm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:6px}
+  .perm-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);cursor:pointer;margin:0;font-weight:500}
+  .perm-item input{width:16px;height:16px;min-height:16px;margin:0}
+  .impersonate-bar{display:none;background:linear-gradient(90deg,#d97706,#b45309);color:#fff;padding:9px 16px;border-radius:11px;margin-bottom:14px;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;font-weight:600}
+  .admin-subtabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .admin-subtabs button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  body.no-perm-del .perm-del{display:none!important}
+  body.no-perm-edit .perm-edit{display:none!important}
+  body.no-perm-pay #navPay,body.no-perm-pay #navDue,body.no-perm-pay #payments,body.no-perm-pay #dues{display:none!important}
+  body.no-perm-exp #navExp,body.no-perm-exp #expenses{display:none!important}
+  body:not(.role-superadmin) .superadmin-only{display:none!important}
+  .modal-overlay{z-index:100000!important}#toastContainer{z-index:100005!important}
+  .prog-wrap{width:100%;height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px}
+  .prog-bar{height:100%;border-radius:99px;transition:width .25s}
+  @media(max-width:640px){.perm-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="toastContainer"></div>
+<div id="sidebarBackdrop"></div>
+
+<!-- AUTH OVERLAY -->
+<div id="authOverlay">
+  <div id="authCard">
+    <h2 id="uiLoginTitle">Ads হিসাব ম্যানেজার</h2>
+    <p class="subtitle" id="uiLoginSub">আপনার বিজ্ঞাপনের হিসাব ও লাভ-ক্ষতি নিরাপদে পরিচালনা করুন</p>
+
+    <div id="loginFormContainer">
+      <div class="field"><label id="uiUserLabel">ইউজারনেম / ইমেইল / মোবাইল</label><input id="loginUser" type="text" autocomplete="username" placeholder="ইউজারনেম, ইমেইল বা মোবাইল নম্বর"></div>
+      <div class="field"><label id="uiPassLabel">পাসওয়ার্ড</label>
+        <div class="password-container">
+          <input id="loginPass" type="password" autocomplete="current-password" placeholder="পাসওয়ার্ড লিখুন">
+          <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPass', this)" title="পাসওয়ার্ড দেখান">👁</button>
+        </div>
+      </div>
+      <label for="rememberLogin" style="display:flex;align-items:center;gap:8px;margin:8px 0 16px;color:var(--muted);font-size:13px;cursor:pointer">
+        <input id="rememberLogin" type="checkbox" style="width:16px;height:16px;min-height:16px;margin:0"><span id="uiRememberText">পাসওয়ার্ড মনে রাখুন</span>
+      </label>
+      <button id="loginBtn" type="button" style="width:100%;padding:12px">লগইন করুন</button>
+
+      <div style="display:flex;justify-content:space-between;margin:12px 0;gap:8px">
+        <button type="button" id="forgotBtn" class="secondary" style="font-size:11.5px;padding:7px 8px;flex:1">পাসওয়ার্ড রিসেট</button>
+        <button type="button" id="forgotUserBtn" class="secondary" style="font-size:11.5px;padding:7px 8px;flex:1">ইউজারনেম খুঁজুন</button>
+      </div>
+      <button id="showRegisterBtn" type="button" class="secondary" style="width:100%;margin-top:4px">নতুন অ্যাকাউন্ট তৈরি করুন</button>
+      <button id="loginHelpBtn" type="button" class="warn" style="width:100%;margin-top:8px;font-size:12px;padding:9px">🆘 অ্যাডমিন / সুপার অ্যাডমিন হেল্প</button>
+    </div>
+
+    <div id="registerPanel" style="display:none;margin-top:10px">
+      <h3 style="margin:0 0 12px;font-size:16px;text-align:center">নতুন অ্যাকাউন্ট তৈরি করুন</h3>
+      <div class="field"><label>আপনার নাম *</label><input id="regName" placeholder="পূর্ণ নাম"></div>
+      <div class="field"><label>ইউজারনেম *</label><input id="regUsername" placeholder="ইউজারনেম (ছোট হাতের ইংরেজি)"></div>
+      <div class="field"><label>ইমেইল *</label><input id="regEmail" type="email" placeholder="name@example.com"></div>
+      <div class="field"><label>মোবাইল নম্বর *</label><input id="regPhone" type="tel" placeholder="01XXXXXXXXX"></div>
+      <div class="field"><label>পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) *</label>
+        <div class="password-container">
+          <input id="regPass" type="password" minlength="6" placeholder="পাসওয়ার্ড লিখুন">
+          <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPass', this)">👁</button>
+        </div>
+      </div>
+      <div class="field"><label>পাসওয়ার্ড আবার লিখুন *</label>
+        <div class="password-container">
+          <input id="regPass2" type="password" minlength="6" placeholder="পুনরায় পাসওয়ার্ড লিখুন">
+          <button type="button" class="toggle-password" onclick="togglePasswordVisibility('regPass2', this)">👁</button>
+        </div>
+      </div>
+      <button id="registerBtn" type="button" style="width:100%;margin-bottom:10px">অ্যাকাউন্ট তৈরি করুন</button>
+      <button id="backToLoginBtn" type="button" class="secondary" style="width:100%">ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন</button>
+    </div>
+    <div id="authMsg"></div>
+  </div>
+</div>
+
+<!-- MODAL: LOGIN HELP (ADMIN & SUPER ADMIN) -->
+<div id="loginHelpModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(470px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">🆘 অ্যাডমিন / সুপার অ্যাডমিন সহায়তা</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('loginHelpModal')">✕</button>
+    </div>
+    <div id="lhWaWrap" style="display:none;margin-bottom:12px;padding:10px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-size:12.5px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>জরুরি প্রয়োজনে সরাসরি WhatsApp করুন:</span>
+        <a id="lhWaBtn" href="#" target="_blank" style="text-decoration:none"><button type="button" class="sm" style="background:#059669">📲 WhatsApp মেসেজ</button></a>
+      </div>
+    </div>
+    <form id="loginHelpForm">
+      <div class="field"><label>কাকে মেসেজ পাঠাবেন?</label>
+        <select id="lhTarget">
+          <option value="Super Admin">Super Admin (মূল মালিক)</option>
+          <option value="Admin">Admin (ম্যানেজার)</option>
+          <option value="Both">Admin ও Super Admin উভয়কে</option>
+        </select>
+      </div>
+      <div class="field"><label>আপনার নাম *</label><input id="lhName" required placeholder="পূর্ণ নাম লিখুন"></div>
+      <div class="field"><label>ইউজারনেম বা মোবাইল নম্বর *</label><input id="lhContact" required placeholder="01XXXXXXXXX বা @username"></div>
+      <div class="field"><label>বিষয়</label>
+        <select id="lhTopic">
+          <option value="পাসওয়ার্ড ভুলে গেছি">পাসওয়ার্ড ভুলে গেছি / রিসেট চাই</option>
+          <option value="অ্যাকাউন্ট আনব্লক">অ্যাকাউন্ট আনব্লক / অ্যাক্সেস সমস্যা</option>
+          <option value="নতুন স্টাফ/ইউজার অ্যাক্সেস">নতুন স্টাফ/ইউজার অ্যাক্সেস চাই</option>
+          <option value="অন্যান্য প্রশ্ন">অন্যান্য প্রশ্ন / মন্তব্য</option>
+        </select>
+      </div>
+      <div class="field"><label>বিস্তারিত বার্তা *</label><textarea id="lhMessage" rows="3" required placeholder="আপনার সমস্যা বা কথাটি বিস্তারিত লিখুন..."></textarea></div>
+      <button type="submit" style="width:100%">📩 মেসেজ পাঠান</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: PASSWORD / USERNAME RECOVERY -->
+<div id="recoveryModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(440px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0" id="recoveryTitle">পাসওয়ার্ড রিসেট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('recoveryModal')">✕</button>
+    </div>
+    <form id="recoveryForm">
+      <input type="hidden" id="recoveryMode" value="password">
+      <div class="field"><label>রেজিস্টার্ড ইমেইল</label><input id="recEmail" type="email" required placeholder="name@example.com"></div>
+      <div class="field"><label>রেজিস্টার্ড মোবাইল নম্বর</label><input id="recPhone" type="tel" required placeholder="01XXXXXXXXX"></div>
+      <div id="recNewPassWrap">
+        <div class="field"><label>নতুন পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)</label>
+          <div class="password-container">
+            <input id="recNewPass" type="password" minlength="6" placeholder="নতুন পাসওয়ার্ড">
+            <button type="button" class="toggle-password" onclick="togglePasswordVisibility('recNewPass', this)">👁</button>
+          </div>
+        </div>
+      </div>
+      <button type="submit" style="width:100%">যাচাই ও সাবমিট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: INVOICE -->
+<div id="invoiceModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="noprint" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;padding:10px;background:var(--soft);border:1px solid var(--line);border-radius:10px;margin-bottom:14px">
+      <div style="flex:1;min-width:130px"><label style="margin-bottom:3px">শুরুর তারিখ</label><input id="invFrom" type="date" style="min-height:34px;padding:5px 8px"></div>
+      <div style="flex:1;min-width:130px"><label style="margin-bottom:3px">শেষ তারিখ</label><input id="invTo" type="date" style="min-height:34px;padding:5px 8px"></div>
+      <button type="button" id="invApplyBtn" class="sm" style="margin:0;padding:8px 12px">ফিল্টার</button>
+      <button type="button" id="invResetBtn" class="secondary sm" style="margin:0;padding:8px 12px">সব তারিখ</button>
+    </div>
+
+    <div id="invoicePrintArea">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2563eb;padding-bottom:12px;margin-bottom:16px">
+        <div>
+          <img id="invLogoImg" alt="Logo" style="display:none;max-height:46px;max-width:140px;object-fit:contain;margin-bottom:6px">
+          <h2 style="margin:0;color:#2563eb" id="invAgencyName">Ads হিসাব ম্যানেজার</h2>
+          <small style="color:#64748b" id="invAgencyContact">প্রফেশনাল ইনভয়েস ও ক্যাশ মেমো</small>
+        </div>
+        <div style="text-align:right">
+          <strong id="invDate">তারিখ: --</strong><br>
+          <small id="invId">ইনভয়েস নং: #INV-001</small><br>
+          <span id="invStatusStamp" class="badge-danger" style="margin-top:4px">DUE</span>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;font-size:13.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong>কাস্টমার বিবরণ:</strong><br>
+          <span id="invCustName" style="font-size:16px;font-weight:700">--</span><br>
+          <span id="invCustPhone">ফোন: --</span>
+        </div>
+        <div id="invPeriodLabel" style="font-size:12px;color:#64748b;align-self:flex-end"></div>
+      </div>
+      <div class="tablewrap" style="margin-bottom:16px">
+        <table>
+          <thead><tr><th>তারিখ</th><th>কাজের বিবরণ</th><th>ডলার / রেট</th><th>বিল (৳)</th></tr></thead>
+          <tbody id="invRows"></tbody>
+        </table>
+      </div>
+      <div id="invPayWrap" style="display:none;margin-bottom:16px">
+        <strong style="font-size:12.5px;color:#334155;display:block;margin-bottom:6px">💰 আদায়কৃত পেমেন্ট বিবরণ:</strong>
+        <div class="tablewrap" style="margin-top:0">
+          <table>
+            <thead><tr><th>তারিখ</th><th>মাধ্যম</th><th>রেফারেন্স</th><th>জমা (৳)</th></tr></thead>
+            <tbody id="invPayRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;font-size:14px;gap:22px;margin-bottom:12px;flex-wrap:wrap;padding:12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;color:#0f172a">
+        <div>মোট বিল: <strong id="invTotalBill">৳0</strong></div>
+        <div>মোট আদায়: <strong id="invTotalPaid" style="color:#059669">৳0</strong></div>
+        <div id="invBalanceBox">বকেয়া বাকি: <strong id="invTotalDue" style="color:#dc2626">৳0</strong></div>
+      </div>
+      <div id="invPayInfoBox" style="display:none;font-size:12px;padding:9px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;margin-bottom:10px"></div>
+      <div id="invSignWrap" style="display:none;justify-content:flex-end;margin:18px 0 6px">
+        <div style="text-align:center;border-top:1px solid #94a3b8;padding-top:4px;min-width:150px;font-size:12px;color:#334155" id="invSignText">Authorized Signature</div>
+      </div>
+      <p style="font-size:11px;color:#64748b;text-align:center;margin:10px 0 0">ধন্যবাদ! আপনার ব্যবসার সফলতা কামনা করছি।</p>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap" class="noprint">
+      <button type="button" class="secondary" onclick="downloadInvoicePng()">🖼️ ইনভয়েস ছবি (PNG) ডাউনলোড</button>
+      <button type="button" onclick="printInvoice()">🖨️ প্রিন্ট / PDF সেভ</button>
+      <button type="button" class="secondary" onclick="closeModal('invoiceModal')">বন্ধ করুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CLIENT PROFILE & LEDGER -->
+<div id="clientProfileModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(820px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0" id="cpTitle">ক্লায়েন্ট প্রোফাইল</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('clientProfileModal')">✕ বন্ধ করুন</button>
+    </div>
+    <div id="cpBody"></div>
+  </div>
+</div>
+
+<!-- MODAL: CARD STATEMENT -->
+<div id="cardStatementModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(780px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0" id="csTitle">💳 কার্ড স্টেটমেন্ট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('cardStatementModal')">✕ বন্ধ করুন</button>
+    </div>
+    <div id="csSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div class="tablewrap" style="max-height:400px">
+      <table>
+        <thead><tr><th>তারিখ</th><th>ধরণ</th><th>বিবরণ</th><th>জমা (+)</th><th>খরচ (-)</th><th>ব্যালেন্স ($)</th></tr></thead>
+        <tbody id="csRows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDIT USER (SUPER ADMIN) -->
+<div id="editUserModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(520px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ ইউজার / স্টাফ এডিট ও পাসওয়ার্ড রিসেট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editUserModal')">✕</button>
+    </div>
+    <form id="editUserForm">
+      <input type="hidden" id="euId">
+      <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="field"><label>নাম *</label><input id="euName" required></div>
+        <div class="field"><label>ইউজারনেম *</label><input id="euUsername" required></div>
+        <div class="field"><label>ইমেইল</label><input id="euEmail" type="email"></div>
+        <div class="field"><label>মোবাইল</label><input id="euPhone"></div>
+        <div class="field"><label>রোল (Role)</label>
+          <select id="euRole">
+            <option value="staff">Staff (শেয়ার্ড অফিস ওয়ার্কস্পেস)</option>
+            <option value="admin">Admin (আলাদা ওয়ার্কস্পেস)</option>
+            <option value="user">User (আলাদা ওয়ার্কস্পেস)</option>
+          </select>
+        </div>
+        <div class="field"><label>স্ট্যাটাস</label>
+          <select id="euStatus"><option value="active">Active (সচল)</option><option value="suspended">Suspended (ব্লকড)</option></select>
+        </div>
+      </div>
+      <div class="field"><label>নতুন পাসওয়ার্ড সেট করুন (বদলাতে না চাইলে খালি রাখুন)</label><input id="euNewPass" type="text" placeholder="কমপক্ষে ৬ অক্ষর"></div>
+      <div id="euPermsWrap" class="field">
+        <label>স্টাফ পারমিশন (Staff Permission Control):</label>
+        <div class="perm-grid">
+          <label class="perm-item"><input type="checkbox" id="euPermDel"> ডেটা ডিলিট করতে পারবে</label>
+          <label class="perm-item"><input type="checkbox" id="euPermEdit"> পুরোনো ডেটা এডিট পারবে</label>
+          <label class="perm-item"><input type="checkbox" id="euPermPay"> পেমেন্ট ও বকেয়া দেখতে পারবে</label>
+          <label class="perm-item"><input type="checkbox" id="euPermExp"> অফিস খরচ দেখতে পারবে</label>
+        </div>
+      </div>
+      <button type="submit" style="width:100%">পরিবর্তন সেভ করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT CUSTOMER -->
+<div id="editCustomerModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(460px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ কাস্টমার তথ্য এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editCustomerModal')">✕</button>
+    </div>
+    <form id="editCustomerForm">
+      <input type="hidden" id="editCustId">
+      <div class="field"><label>কাস্টমারের নাম *</label><input id="editCustName" required></div>
+      <div class="field"><label>ফোন নম্বর</label><input id="editCustPhone"></div>
+      <div class="field"><label>নোট / রিমার্কস</label><input id="editCustNote"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT PAGE -->
+<div id="editPageModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(480px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ ফেসবুক পেজ ও ট্র্যাকিং এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editPageModal')">✕</button>
+    </div>
+    <form id="editPageForm">
+      <input type="hidden" id="editPageId">
+      <div class="field"><label>পেজের নাম *</label><input id="editPageName" required></div>
+      <div class="field"><label>পেজ লিংক</label><input id="editPageLink" type="url"></div>
+      <div class="field"><label>Ad Account ID</label><input id="editPageAdId"></div>
+      <div class="field"><label>Pixel ID</label><input id="editPagePixelId"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT WORK -->
+<div id="editWorkModal" class="modal-overlay">
+  <div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ ক্যাম্পেইন / কাজের হিসাব এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editWorkModal')">✕</button>
+    </div>
+    <form id="editWorkForm">
+      <input type="hidden" id="ewId">
+      <div class="grid">
+        <div class="field"><label>তারিখ</label><input id="ewDate" type="date" required></div>
+        <div class="field"><label>কাস্টমার</label><select id="ewCustomer" required></select></div>
+        <div class="field"><label>Facebook পেজ</label><select id="ewPage" required></select></div>
+        <div class="field"><label>ক্যাম্পেইনের নাম *</label><input id="ewName" required></div>
+        <div class="field"><label>মেয়াদ (দিন)</label><input id="ewDays" type="number" min="1" required></div>
+        <div class="field"><label>বাজেট ($)</label><input id="ewDollar" type="number" min="0" step=".01" required></div>
+        <div class="field"><label>বিলিং রেট (৳/$)</label><input id="ewRate" type="number" min=".01" step=".01" required></div>
+        <div class="field"><label>ব্যবহৃত ডলার ($)</label><input id="ewActualDollar" type="number" min="0" step=".01" required></div>
+        <div class="field staff-hide"><label>ব্যাংক কার্ড</label><select id="ewCard"><option value="">কার্ড নির্বাচন</option></select></div>
+        <div class="field staff-hide"><label>কেনা রেট (৳/$)</label><input id="ewActualRate" type="number" min="0" step=".01"></div>
+        <div class="field staff-hide"><label>ভ্যাট / ব্যাংক ফি (%)</label><input id="ewFeePct" type="number" min="0" step=".1" value="0"></div>
+        <div class="field staff-hide"><label>অন্যান্য খরচ (৳)</label><input id="ewOther" type="number" min="0" step=".01"></div>
+        <div class="field"><label>আয় / রেভিনিউ (৳)</label><input id="ewRevenue" type="number" min="0" step=".01"></div>
+        <div class="field"><label>কনভার্শন</label><input id="ewConversions" type="number" min="0"></div>
+        <div class="field"><label>ক্রিয়েটিভ লিংক</label><input id="ewCreativeLink" type="url"></div>
+        <div class="field"><label>স্ট্যাটাস</label><select id="ewStatus"><option value="running">চলমান (Running)</option><option value="completed">সম্পন্ন (Completed)</option><option value="paused">পজ (Paused)</option></select></div>
+        <div class="field" style="grid-column:1 / -1"><label>নোট</label><input id="ewNote"></div>
+      </div>
+      <p id="ewPreview" style="margin:8px 0 14px;font-weight:600;color:#2563eb;font-size:13px;background:rgba(37,99,235,0.08);padding:10px;border-radius:8px"></p>
+      <button type="submit">পরিবর্তন সেভ করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT PAYMENT -->
+<div id="editPaymentModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(480px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ পেমেন্ট এডিট করুন</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editPaymentModal')">✕</button>
+    </div>
+    <form id="editPaymentForm">
+      <input type="hidden" id="epId">
+      <div class="field"><label>তারিখ</label><input id="epDate" type="date" required></div>
+      <div class="field"><label>কাস্টমার</label><select id="epCustomer" required></select></div>
+      <div class="field"><label>পরিমাণ (৳)</label><input id="epAmount" type="number" min=".01" step=".01" required></div>
+      <div class="field"><label>মাধ্যম</label><select id="epMethod"><option>bKash</option><option>Nagad</option><option>Bank</option><option>Card</option><option>Cash</option></select></div>
+      <div class="field"><label>রেফারেন্স</label><input id="epRef"></div>
+      <div class="field"><label>নোট</label><input id="epNote"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT EXPENSE -->
+<div id="editExpenseModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(480px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ অফিস খরচ এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editExpenseModal')">✕</button>
+    </div>
+    <form id="editExpenseForm">
+      <input type="hidden" id="eeId">
+      <div class="field"><label>তারিখ</label><input id="eeDate" type="date" required></div>
+      <div class="field"><label>খরচের বিবরণ *</label><input id="eeTitle" required></div>
+      <div class="field"><label>ক্যাটাগরি</label>
+        <select id="eeCategory">
+          <option value="Office Rent">অফিস ভাড়া</option>
+          <option value="Utility & Internet">ইউটিলিটি ও ইন্টারনেট</option>
+          <option value="Salary">স্টাফ স্যালারি</option>
+          <option value="Entertainment">আপ্যায়ন / নাস্তা</option>
+          <option value="Software & Tools">সফটওয়্যার ও টুলস</option>
+          <option value="Others">অন্যান্য</option>
+        </select>
+      </div>
+      <div class="field"><label>পরিমাণ (৳)</label><input id="eeAmount" type="number" min="1" step=".01" required></div>
+      <div class="field"><label>নোট</label><input id="eeNote"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT DEPOSIT -->
+<div id="editDepositModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(460px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ ডলার ডিপোজিট এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editDepositModal')">✕</button>
+    </div>
+    <form id="editDepositForm">
+      <input type="hidden" id="edId">
+      <div class="field"><label>কার্ড *</label><select id="edCard" required></select></div>
+      <div class="field"><label>তারিখ</label><input id="edDate" type="date" required></div>
+      <div class="field"><label>জমা ডলার ($)</label><input id="edAmount" type="number" min="0.01" step=".01" required></div>
+      <div class="field"><label>মোট কেনা টাকা (৳)</label><input id="edTaka" type="number" min="0" step=".01" required></div>
+      <div class="field"><label>নোট</label><input id="edNote"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: EDIT DAILY RATE -->
+<div id="editRateModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(440px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
+      <h3 style="margin:0">✏️ দৈনিক ডলার রেট এডিট</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('editRateModal')">✕</button>
+    </div>
+    <form id="editRateForm">
+      <input type="hidden" id="erId">
+      <div class="field"><label>তারিখ</label><input id="erDate" type="date" required></div>
+      <div class="field"><label>ক্লায়েন্ট বিলিং রেট (৳/$) *</label><input id="erValue" type="number" min=".01" step=".01" required></div>
+      <div class="field"><label>নোট</label><input id="erNote"></div>
+      <button type="submit">আপডেট করুন</button>
+    </form>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside id="appSidebar">
+  <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="brand">
+      <div class="logo-badge">Ads</div>
+      <div>
+        <h1 id="sideBrandTitle">Ads হিসাব ম্যানেজার</h1>
+        <small id="sideBrandSub">Smart · Secure · Pro v72</small>
+      </div>
+    </div>
+    <div class="side-menu">
+      <button class="active" data-tab="dash" id="navDash">📊 ড্যাশবোর্ড</button>
+      <button data-tab="customers" id="navCust">👥 কাস্টমার প্রোফাইল</button>
+      <button data-tab="cards" id="navCards" class="staff-hide">💳 ডলার ও কার্ড হিসাব</button>
+      <button data-tab="rates" id="navRates">📈 দৈনিক ডলার রেট</button>
+      <button data-tab="works" id="navWorks">⚡ কাজের হিসাব</button>
+      <button data-tab="pixelGen" id="navPixel">🎯 মেটা পিক্সেল ও ট্র্যাকিং</button>
+      <button data-tab="expenses" id="navExp">💸 অফিস ও অন্যান্য খরচ</button>
+      <button data-tab="payments" id="navPay">💰 পেমেন্ট অ্যাড</button>
+      <button data-tab="dues" id="navDue">📑 বকেয়া ও অটোমেশন</button>
+      <button data-tab="monthly" id="navMonthly">📅 মাসিক বা নির্দিষ্ট হিসাব</button>
+      <button data-tab="reports" id="navRep" class="staff-hide">📂 ব্যাকআপ ও রিপোর্ট</button>
+      <button data-tab="settings" id="navSet">⚙ সেটিংস</button>
+      <button data-tab="adminPanel" id="adminTab" style="display:none">🛡 অ্যাডমিন প্যানেল</button>
+      <button data-tab="liveChat" id="navChat">💬 নোট ও চ্যাট</button>
+    </div>
+  </div>
+  <div class="side-footer">
+    <h4 id="sideRoleName">Super Admin</h4>
+    <p id="sideRoleDesc">সম্পূর্ণ এক্সেস ও কন্ট্রোল</p>
+    <button type="button" class="danger" style="width:100%;margin-top:10px;padding:8px" onclick="performLocalLogout()" id="navLogout">↪ লগ আউট</button>
+  </div>
+</aside>
+
+<!-- MAIN CONTAINER -->
+<div class="app-container">
+  <header>
+    <div class="head-left">
+      <button type="button" id="mobileMenuBtn" aria-label="Menu">☰</button>
+      <div class="welcome">
+        <h2 id="welcomeTitle">স্বাগতম!</h2>
+        <p id="headerSubText">আপনার এজেন্সির বিজ্ঞাপন ও আর্থিক পারফরম্যান্স পরিচালনা করুন</p>
+      </div>
+    </div>
+    <div class="user-info">
+      <button type="button" class="theme-toggle" id="themeToggleBtn" title="ডার্ক/লাইট মোড পরিবর্তন">🌙</button>
+      <div class="notif" id="notifIcon" title="বিজ্ঞপ্তি">🔔<span id="notifCount" style="display:none">0</span></div>
+      <div class="notif-dropdown" id="notifBox">
+        <h4 id="uiNotifHeader">বিজ্ঞপ্তি ও অটো অ্যালার্ট</h4>
+        <div id="notifList">কোনো নতুন বিজ্ঞপ্তি নেই</div>
+      </div>
+      <div class="profile-pill" onclick="goToSection('settings')" title="প্রোফাইল সেটিংস">
+        <img id="headerProfilePic" alt="Profile">
+        <div>
+          <strong id="headerProfileName" style="font-size:13px;display:block">User</strong>
+          <small id="headerProfileRole" style="font-size:11px;color:var(--muted)">Admin</small>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="impersonateBanner" class="impersonate-bar noprint">
+      <span>👁️ প্রিভিউ মোড: আপনি এখন <strong id="impersonateName">User</strong>-এর ওয়ার্কস্পেস দেখছেন</span>
+      <button type="button" class="sm" id="exitImpersonateBtn" style="background:#fff;color:#92400e">🔙 সুপার অ্যাডমিনে ফিরুন</button>
+    </div>
+
+    <!-- 1: DASHBOARD -->
+    <section id="dash" class="active">
+      <div id="backupReminderBar" class="noprint" style="display:none;margin-bottom:14px;padding:11px 14px;border-radius:11px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:13px;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <span>⚠️ <strong>ডেটা সুরক্ষা সতর্কতা:</strong> গত ৭ দিনের মধ্যে কোনো ব্যাকআপ নেওয়া হয়নি। ডেটা নিরাপদ রাখতে এখনই একটি ব্যাকআপ সেভ করুন।</span>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="sm" onclick="$('backupBtn')?.click()">💾 এখনই ব্যাকআপ নিন</button>
+          <button type="button" class="secondary sm" onclick="sessionStorage.setItem('backup_dismissed_v72','1');$('backupReminderBar').style.display='none'">পরে</button>
+        </div>
+      </div>
+
+      <div class="periodbar noprint" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px">
+        <div><label id="lblDashFrom">শুরুর তারিখ</label><input type="date" id="dashFrom"></div>
+        <div><label id="lblDashTo">শেষ তারিখ</label><input type="date" id="dashTo"></div>
+        <button type="button" id="applyDashDates">ফিল্টার রিপোর্ট</button>
+        <button type="button" id="clearDashDates" class="secondary">সব তারিখ</button>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card m1 staff-hide"><small id="cardTitleTodayProfit">আজকের নিট লাভ</small><strong id="mTodayProfit">৳0</strong><span class="trend">⚡ Today Net</span></div>
+        <div class="metric-card m2"><small id="cardTitleTotalBill">মোট বিলিং / আয়</small><strong id="mBill">৳0</strong><span class="trend">↑ Total Billing</span></div>
+        <div class="metric-card m3 staff-hide"><small id="cardTitleTotalCost">প্রকৃত এড খরচ (ভ্যাট সহ)</small><strong id="mActual">৳0</strong><span class="trend">💳 Ad Cost + Fee</span></div>
+        <div class="metric-card m4 staff-hide"><small id="cardTitleNetProfit">নিট প্রফিট (সব খরচ বাদে)</small><strong id="mProfit">৳0</strong><span class="trend">⭐ Net Profit</span></div>
+      </div>
+
+      <div class="metrics-grid" style="margin-bottom:20px">
+        <div class="metric-card" style="background:linear-gradient(135deg,#475569 0%,#1e293b 100%)"><small>আজকের মোট বিল</small><strong id="mTodayBill">৳0</strong></div>
+        <div class="metric-card staff-hide" style="background:linear-gradient(135deg,#ec4899 0%,#be185d 100%)"><small>আজকের এড খরচ</small><strong id="mTodaySpend">৳0</strong></div>
+        <div class="metric-card" style="background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%)"><small>মোট আদায়কৃত টাকা</small><strong id="mTotalPaid">৳0</strong><span class="trend" id="mAdvanceNote"></span></div>
+        <div class="metric-card" style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%)"><small>মোট বকেয়া পাওনা</small><strong id="mDue">৳0</strong></div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="chart-box staff-hide">
+          <div class="chart-header">
+            <h3 id="chartTitleMonthly">📈 শেষ ৬ মাসের আয়, খরচ ও লাভ</h3>
+            <div class="chart-legend">
+              <span><i class="dot" style="background:#2563eb"></i>বিল</span>
+              <span><i class="dot" style="background:#7c3aed"></i>খরচ</span>
+              <span><i class="dot" style="background:#10b981"></i>লাভ</span>
+            </div>
+          </div>
+          <div id="monthlyChart" style="height:210px;display:flex;align-items:flex-end;justify-content:space-around;padding:15px 4px 0;border-bottom:1px solid var(--line);gap:8px"></div>
+          <div id="monthlyChartLabels" style="display:flex;justify-content:space-around;font-size:11px;color:var(--muted);margin-top:8px"></div>
+        </div>
+
+        <div class="chart-box">
+          <div class="chart-header"><h3 id="chartTitleTopClients">🏆 সর্বোচ্চ আয় দেওয়া ক্লায়েন্ট</h3></div>
+          <div id="topClientsList" style="display:flex;flex-direction:column;gap:10px;padding-top:4px"></div>
+          <div class="staff-hide">
+            <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--ink)">💳 কার্ড ব্যালেন্স সংক্ষেপ</h4>
+            <div id="dashCardSummary" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-box">
+        <div class="chart-header">
+          <h3>⚡ চলমান ক্যাম্পেইন ও মেয়াদ মনিটর (Active Ads)</h3>
+          <button type="button" class="secondary sm" onclick="goToSection('works')">+ নতুন কাজ</button>
+        </div>
+        <div class="tablewrap" style="margin-top:0">
+          <table>
+            <thead><tr><th>ক্লায়েন্ট ও পেজ</th><th>ক্যাম্পেইন</th><th>বাজেট / ব্যবহৃত $</th><th>দৈনিক বাজেট</th><th>সময় বাকি</th><th>অ্যাকশন</th></tr></thead>
+            <tbody id="dashActiveWorksRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2: CUSTOMERS -->
+    <section id="customers">
+      <h2 id="secTitleCust">👥 কাস্টমার ও ফেসবুক পেজ তথ্য</h2>
+      <form id="customerForm">
+        <div class="grid">
+          <div class="field"><label>কাস্টমারের নাম *</label><input id="custName" required placeholder="নাম লিখুন"></div>
+          <div class="field"><label>ফোন নম্বর</label><input id="custPhone" placeholder="01XXXXXXXXX"></div>
+          <div class="field"><label>নোট / রিমার্কস</label><input id="custNote" placeholder="প্রয়োজনীয় তথ্য"></div>
+        </div>
+        <button type="submit">+ কাস্টমার যুক্ত করুন</button>
+      </form>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+
+      <form id="pageForm">
+        <div class="grid">
+          <div class="field"><label>কাস্টমার নির্বাচন *</label><select id="pageCustomer" required></select></div>
+          <div class="field"><label>Facebook পেজের নাম *</label><input id="pageName" required placeholder="পেজের নাম"></div>
+          <div class="field"><label>পেজ লিংক</label><input id="pageLink" type="url" placeholder="https://facebook.com/..."></div>
+          <div class="field"><label>অ্যাড অ্যাকাউন্ট আইডি (Ad Account ID)</label><input id="pageAdId" placeholder="act_123456789"></div>
+          <div class="field"><label>পিক্সেল আইডি (Meta Pixel ID)</label><input id="pagePixelId" placeholder="9876543210"></div>
+        </div>
+        <button type="submit">+ পেজ যুক্ত করুন</button>
+      </form>
+
+      <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">কাস্টমার তালিকা</h2>
+        <input id="customerSearch" type="text" placeholder="🔍 নাম বা মোবাইল দিয়ে খুঁজুন..." style="width:260px">
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>ID</th><th>কাস্টমার</th><th>ফোন</th><th>পেজ</th><th>মোট বিল</th><th>আদায়</th><th>বকেয়া / অ্যাডভান্স</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="customerRows"></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:24px">পেজ ও মেটা ট্র্যাকিং তালিকা</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>ID</th><th>কাস্টমার</th><th>পেজ নাম</th><th>লিংক</th><th>Ad Account ID</th><th>Pixel ID</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="pageRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3: CARDS & USD -->
+    <section id="cards">
+      <h2 id="secTitleCards">💳 ডলার ও ব্যাংক কার্ড আর্থিক হিসাব</h2>
+      <div class="card-add-box">
+        <h3 style="margin:0 0 10px;font-size:14px">💳 নতুন ব্যাংকিং কার্ড যোগ করুন</h3>
+        <form id="addCardForm" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input id="newCardInput" placeholder="কার্ডের নাম (যেমন: EBL Visa / City Bank Amex)" required style="flex:1;min-width:220px">
+          <button type="submit">+ কার্ড যোগ করুন</button>
+        </form>
+      </div>
+
+      <div class="metrics-grid" id="cardMetrics" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))"></div>
+
+      <h2>ডলার ডিপোজিট / কেনা</h2>
+      <form id="depositForm">
+        <div class="grid">
+          <div class="field"><label>কার্ড *</label><select id="depositCard" required></select></div>
+          <div class="field"><label>তারিখ (টাকা জমার তারিখ)</label><input id="depositDate" type="date" required></div>
+          <div class="field"><label>জমা ডলার ($)</label><input id="depositAmount" type="number" min="0.01" step=".01" required placeholder="100"></div>
+          <div class="field"><label>মোট কেনা টাকা (৳)</label><input id="depositTaka" type="number" min="0" step=".01" required placeholder="12200"></div>
+          <div class="field"><label>নোট</label><input id="depositNote" placeholder="ব্যাংক রেট বা নোট"></div>
+        </div>
+        <button type="submit">ডিপোজিট সেভ করুন</button>
+      </form>
+
+      <h2 style="margin-top:24px">কার্ড ব্যালেন্স ও গড় রেট সারাংশ</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>কার্ড নাম</th><th>মোট কেনা ($)</th><th>মোট টাকা (৳)</th><th>গড় রেট (৳/$)</th><th>FB খরচ ($)</th><th>অবশিষ্ট ($)</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="cardBalanceRows"></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:24px">ডলার ডিপোজিট হিস্ট্রি</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>তারিখ</th><th>কার্ড</th><th>ডলার ($)</th><th>টাকা (৳)</th><th>রেট (৳/$)</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="depositHistoryRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4: DAILY RATES -->
+    <section id="rates">
+      <h2 id="secTitleRates">📈 দৈনিক ডলার রেট</h2>
+      <form id="rateForm">
+        <div class="grid">
+          <div class="field"><label>তারিখ</label><input id="rateDate" type="date" required></div>
+          <div class="field"><label>ক্লায়েন্ট বিলিং রেট (৳/$) *</label><input id="rateValue" type="number" min=".01" step=".01" required placeholder="125"></div>
+          <div class="field"><label>নোট</label><input id="rateNote" placeholder="রেট সম্পর্কিত মন্তব্য"></div>
+        </div>
+        <button type="submit">রেট সেভ করুন</button>
+      </form>
+      <div class="tablewrap" style="margin-top:16px">
+        <table>
+          <thead><tr><th>তারিখ</th><th>ক্লায়েন্ট রেট (৳)</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="rateRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5: WORKS / CAMPAIGNS -->
+    <section id="works">
+      <h2 id="secTitleWorks">⚡ নতুন কাজ / বিজ্ঞাপন ক্যাম্পেইন</h2>
+      <form id="workForm">
+        <div class="grid">
+          <div class="field"><label>তারিখ</label><input id="wDate" type="date" required></div>
+          <div class="field"><label>কাস্টমার *</label><select id="wCustomer" required></select></div>
+          <div class="field"><label>Facebook পেজ *</label><select id="wPage" required></select></div>
+          <div class="field"><label>ক্যাম্পেইনের নাম *</label><input id="wName" required placeholder="যেমন: Eid Promo Ad"></div>
+          <div class="field"><label>মেয়াদ (দিন)</label><input id="wDays" type="number" min="1" value="7" required></div>
+          <div class="field"><label>ক্যাম্পেইন বাজেট ($)</label><input id="wDollar" type="number" min="0" step=".01" required placeholder="50"></div>
+          <div class="field"><label>ক্লায়েন্ট বিল রেট (৳/$) *</label><input id="wRate" type="number" min=".01" step=".01" required placeholder="125"></div>
+          <div class="field"><label>Facebook এ ব্যবহৃত ডলার ($)</label><div style="display:flex;gap:6px"><input id="wActualDollar" type="number" min="0" step=".01" value="0" placeholder="48" style="flex:1;min-width:0"><button type="button" class="secondary sm" onclick="matchBudgetDollar()" title="বাজেটের সমান ডলার বসান" style="white-space:nowrap;margin:0">= বাজেট</button></div></div>
+          <div class="field staff-hide"><label>ব্যবহৃত ব্যাংক কার্ড</label><select id="wCard"><option value="">কার্ড নির্বাচন</option></select></div>
+          <div class="field staff-hide"><label>প্রকৃত ডলার কেনা রেট (৳/$)</label><input id="wActualRate" type="number" min="0" step=".01" value="0" placeholder="120"></div>
+          <div class="field staff-hide"><label>Meta VAT / ব্যাংক ফি (%)</label><input id="wFeePct" type="number" min="0" step=".1" value="0" placeholder="যেমন: 15 বা 2"></div>
+          <div class="field staff-hide"><label>অন্যান্য সার্ভিস খরচ (৳)</label><input id="wOther" type="number" min="0" step=".01" value="0" placeholder="0"></div>
+          <div class="field"><label>ক্যাম্পেইন থেকে আয় (৳) [ROAS]</label><input id="wRevenue" type="number" min="0" step=".01" value="0" placeholder="0"></div>
+          <div class="field"><label>কনভার্শন সংখ্যা [CPA]</label><input id="wConversions" type="number" min="0" value="0" placeholder="0"></div>
+          <div class="field"><label>ক্রিয়েটিভ ড্রাইভ/Canva লিংক</label><input id="wCreativeLink" type="url" placeholder="https://..."></div>
+          <div class="field"><label>স্ট্যাটাস</label><select id="wStatus"><option value="running">চলমান (Running)</option><option value="completed">সম্পন্ন (Completed)</option><option value="paused">পজ (Paused)</option></select></div>
+          <div class="field" style="grid-column:1 / -1"><label>নোট</label><input id="wNote" placeholder="অতিরিক্ত বিস্তারিত তথ্য"></div>
+        </div>
+        <p id="preview" style="margin:10px 0 14px;font-weight:600;color:#2563eb;font-size:13px;background:rgba(37,99,235,0.08);padding:10px 12px;border-radius:9px">বিল: ৳0.00</p>
+        <button type="submit">কাজ সেভ করুন</button>
+      </form>
+
+      <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">কাজের ইতিহাস ও বিস্তারিত</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="workCustomerFilter" style="width:170px"><option value="">সব কাস্টমার</option></select>
+          <select id="workStatusFilter" style="width:155px">
+            <option value="">সব স্ট্যাটাস</option>
+            <option value="running">চলমান (Running)</option>
+            <option value="completed">সম্পন্ন (Completed)</option>
+            <option value="paused">পজ (Paused)</option>
+          </select>
+          <input id="workSearch" type="text" placeholder="🔍 কাজ বা ক্লায়েন্ট খুঁজুন..." style="width:220px">
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>ID</th><th>তারিখ</th><th>কাস্টমার ও পেজ</th><th>কাজ</th><th>ব্যবহৃত $</th><th>বিল (৳)</th><th class="staff-hide">প্রকৃত খরচ (ফি সহ)</th><th class="staff-hide">লাভ (৳)</th><th>ROAS & CPA</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="workRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6: META PIXEL HUB -->
+    <section id="pixelGen">
+      <h2>🎯 মেটা পিক্সেল ও কনভার্শন ট্র্যাকিং হাব (Meta Pixel & CAPI)</h2>
+      <p class="muted" style="margin-bottom:16px">আপনার সংগৃহীত পিক্সেল আইডি ম্যানেজ করুন, ইভেন্ট কোড জেনারেট করুন এবং CAPI পেলোড তৈরি করুন।</p>
+
+      <div class="grid">
+        <div class="field"><label>পিক্সেল আইডি দিন</label><input id="genPixelId" placeholder="যেমন: 123456789012345" value="1234567890"></div>
+        <div class="field"><label>Standard Event সিলেক্ট করুন</label>
+          <select id="genPixelEvent">
+            <option value="PageView">PageView (পেজ ভিজিট)</option>
+            <option value="ViewContent">ViewContent (কন্টেন্ট দর্শন)</option>
+            <option value="Lead">Lead (লিড বা ফর্ম সাবমিশন)</option>
+            <option value="Contact">Contact (যোগাযোগ বা কল)</option>
+            <option value="AddToCart">AddToCart (কার্টে যুক্ত)</option>
+            <option value="InitiateCheckout">InitiateCheckout (চেকআউট শুরু)</option>
+            <option value="Purchase" selected>Purchase (পেমেন্ট বা সফল সেলস)</option>
+          </select>
+        </div>
+        <div class="field"><label>অর্ডারের মান / ভ্যালু (BDT)</label><input id="genPixelVal" type="number" value="1200"></div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+        <button type="button" id="generatePixelBtn">Pixel Base Code তৈরি করুন</button>
+        <button type="button" id="simulateCapiBtn" class="secondary">⚙️ Conversions API (CAPI) Payload জেনারেট</button>
+      </div>
+
+      <h3 style="margin-top:20px;font-size:14px">📋 মেটা পিক্সেল কোড আউটপুট:</h3>
+      <div class="code-box" id="pixelCodeOutput"></div>
+      <button type="button" id="copyPixelBtn" class="secondary">📋 কোড কপি করুন</button>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
+
+      <h3>📡 ক্লায়েন্ট অনুযায়ী সেভ থাকা Meta Pixel আইডি তালিকা</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>কাস্টমার</th><th>পেজ নাম</th><th>Pixel ID</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="pixelListRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7: OFFICE EXPENSES -->
+    <section id="expenses">
+      <h2>💸 অফিস ও অন্যান্য দৈনন্দিন খরচ</h2>
+      <form id="expenseForm">
+        <div class="grid">
+          <div class="field"><label>তারিখ</label><input id="expDate" type="date" required></div>
+          <div class="field"><label>খরচের বিবরণ / টাইটেল *</label><input id="expTitle" required placeholder="যেমন: অফিস ভাড়া, ইন্টারনেট বিল"></div>
+          <div class="field"><label>ক্যাটাগরি</label>
+            <select id="expCategory">
+              <option value="Office Rent">অফিস ভাড়া</option>
+              <option value="Utility & Internet">ইউটিলিটি ও ইন্টারনেট</option>
+              <option value="Salary">স্টাফ স্যালারি</option>
+              <option value="Entertainment">আপ্যায়ন / নাস্তা</option>
+              <option value="Software & Tools">সফটওয়্যার ও টুলস</option>
+              <option value="Others">অন্যান্য</option>
+            </select>
+          </div>
+          <div class="field"><label>পরিমাণ (৳) *</label><input id="expAmount" type="number" min="1" step=".01" required placeholder="500"></div>
+          <div class="field" style="grid-column:span 2"><label>নোট</label><input id="expNote" placeholder="অতিরিক্ত বিবরণ"></div>
+        </div>
+        <button type="submit">খরচ সেভ করুন</button>
+      </form>
+
+      <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">খরচের তালিকা</h2>
+        <strong id="totalExpenseSummary" style="color:var(--danger)">মোট খরচ: ৳0.00</strong>
+      </div>
+      <div id="expenseCategorySummary" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>তারিখ</th><th>খরচের টাইটেল</th><th>ক্যাটাগরি</th><th>পরিমাণ</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="expenseRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 8: PAYMENTS -->
+    <section id="payments">
+      <h2>💰 পেমেন্ট গ্রহণ ও রেকর্ড (অ্যাডভান্স / বকেয়া)</h2>
+      <form id="paymentForm">
+        <div class="grid">
+          <div class="field"><label>তারিখ</label><input id="pDate" type="date" required></div>
+          <div class="field"><label>কাস্টমার *</label><select id="pCustomer" required></select><small id="pCustomerStatus" style="display:block;margin-top:5px;font-weight:600"></small></div>
+          <div class="field"><label>প্রাপ্ত টাকা (৳) *</label><input id="pAmount" type="number" min=".01" step=".01" required placeholder="5000"></div>
+          <div class="field"><label>পেমেন্ট মাধ্যম</label><select id="pMethod"><option>bKash</option><option>Nagad</option><option>Bank</option><option>Card</option><option>Cash</option></select></div>
+          <div class="field"><label>ক্যাশআউট / গেটওয়ে চার্জ (৳)</label><input id="pFee" type="number" min="0" step=".01" value="0" placeholder="0"></div>
+          <div class="field"><label>ট্রানজেকশন / কিস্তি রেফারেন্স</label><input id="pRef" placeholder="TrxID বা কিস্তি নং"></div>
+          <div class="field" style="grid-column:1 / -1"><label>নোট</label><input id="pNote" placeholder="অ্যাডভান্স বা বকেয়া নোট"></div>
+        </div>
+        <button type="submit">পেমেন্ট জমা করুন</button>
+      </form>
+
+      <h2 style="margin-top:24px">সাম্প্রতিক পেমেন্ট তালিকা</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>তারিখ</th><th>কাস্টমার</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রেফারেন্স / নোট</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="paymentRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 9: DUES & WHATSAPP -->
+    <section id="dues">
+      <h2>📑 বকেয়া, অ্যাডভান্স ও WhatsApp রিমাইন্ডার</h2>
+      <div class="metrics-grid" id="dueMetrics" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>কাস্টমার</th><th>ফোন</th><th>মোট বিল</th><th>আদায়কৃত</th><th>বকেয়া টাকা</th><th>শেষ রিমাইন্ডার লগ</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="dueRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 10: MONTHLY / CUSTOM REPORT -->
+    <section id="monthly">
+      <h2>📅 মাসিক বা নির্দিষ্ট সময়ের হিসাব ও রিপোর্ট</h2>
+      <div class="periodbar noprint" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px">
+        <div><label>শুরুর তারিখ</label><input type="date" id="repFrom"></div>
+        <div><label>শেষ তারিখ</label><input type="date" id="repTo"></div>
+        <button type="button" id="applyRepDates">হিসাব দেখুন</button>
+        <button type="button" id="clearRepDates" class="secondary">চলতি মাস</button>
+        <button type="button" onclick="window.print()" class="secondary">🖨️ প্রিন্ট</button>
+      </div>
+
+      <div class="metrics-grid" style="margin-bottom:20px">
+        <div class="metric-card m1"><small>সিলেক্টেড মোট বিল</small><strong id="repBill">৳0</strong></div>
+        <div class="metric-card m2 staff-hide"><small>সিলেক্টেড এড ও অফিস খরচ</small><strong id="repSpend">৳0</strong></div>
+        <div class="metric-card m3"><small>সিলেক্টেড মোট আদায়</small><strong id="repPaid">৳0</strong></div>
+        <div class="metric-card m4 staff-hide"><small>সিলেক্টেড নিট লাভ</small><strong id="repProfit">৳0</strong></div>
+      </div>
+
+      <h3>নির্বাচিত সময়ের কাজের বিবরণ</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>তারিখ</th><th>কাস্টমার ও পেজ</th><th>ক্যাম্পেইন</th><th>বিল (৳)</th><th class="staff-hide">প্রকৃত খরচ (৳)</th><th class="staff-hide">লাভ (৳)</th></tr></thead>
+          <tbody id="repWorkRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 11: REPORTS & BACKUP -->
+    <section id="reports">
+      <h2>📂 সার্বিক রিপোর্ট, এক্সপোর্ট ও ব্যাকআপ</h2>
+      <div class="noprint" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button type="button" id="printBtn">🖨️ প্রিন্ট / PDF রিপোর্ট</button>
+        <button type="button" id="exportCsvBtn" class="secondary">📥 কাস্টমার সামারি CSV (Excel)</button>
+        <button type="button" id="exportWorksCsvBtn" class="secondary">📥 কাজের বিস্তারিত CSV</button>
+        <button type="button" id="backupBtn" class="secondary">💾 JSON ব্যাকআপ ডাউনলোড</button>
+        <label class="secondary" style="padding:10px 16px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;margin:0;background:#e2e8f0;color:#1e293b;font-weight:600;font-size:13px">
+          <input type="file" id="restoreFile" accept=".json" style="display:none">
+          <span>📂 ব্যাকআপ রিস্টোর</span>
+        </label>
+        <button type="button" id="wipeBtn" class="danger">⚠️ সব ডেটা মুছুন</button>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>কাস্টমার</th><th>ব্যবহৃত ডলার ($)</th><th>মোট বিল (৳)</th><th>আদায় (৳)</th><th>বকেয়া / অ্যাডভান্স</th><th>নিট প্রফিট (৳)</th></tr></thead>
+          <tbody id="reportRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 12: SETTINGS -->
+    <section id="settings">
+      <h2>⚙ অ্যাপ সেটিংস, এজেন্সি ব্র্যান্ডিং ও প্রোফাইল</h2>
+      <div class="settings-layout">
+        <nav class="settings-menu">
+          <button type="button" class="active" data-settings-panel="profilePanel">👤 প্রোফাইল তথ্য</button>
+          <button type="button" data-settings-panel="agencyPanel" class="staff-hide">🏢 এজেন্সি, পেমেন্ট ও মেসেজ</button>
+          <button type="button" data-settings-panel="usernamePanel">🔐 ইউজারনেম পরিবর্তন</button>
+          <button type="button" data-settings-panel="passwordPanel">🔑 পাসওয়ার্ড পরিবর্তন</button>
+          <button type="button" data-settings-panel="languagePanel">🌐 ভাষা সেটিংস</button>
+        </nav>
+
+        <div>
+          <div id="profilePanel" class="settings-panel active">
+            <h3>প্রোফাইল সেটিংস</h3>
+            <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap;padding:14px;background:var(--soft);border-radius:14px;border:1px solid var(--line)">
+              <img id="profilePreview" style="width:74px;height:74px;border-radius:50%;object-fit:cover;background:#2563eb;border:3px solid var(--brand)" alt="Profile Preview">
+              <div style="flex:1;min-width:180px">
+                <strong id="profileDisplayName" style="font-size:17px;display:block">Admin User</strong>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+                  <span id="profileUserId" class="badge-admin">ID: AS-00001</span>
+                  <span id="profileRoleBadge" class="badge-success">Super Admin</span>
+                </div>
+              </div>
+              <button type="button" class="danger sm" id="removeProfilePicBtn">🗑️ ছবি সরান</button>
+            </div>
+            <form id="profileForm">
+              <div class="grid">
+                <div class="field"><label>নাম *</label><input id="profileName" required></div>
+                <div class="field"><label>ইমেইল</label><input id="profileEmail" type="email"></div>
+                <div class="field"><label>মোবাইল</label><input id="profilePhone" type="tel"></div>
+                <div class="field"><label>প্রোফাইল ছবির লিংক (URL)</label><input id="profilePicInput" placeholder="https://... (ঐচ্ছিক)"></div>
+                <div class="field"><label>অথবা ডিভাইস থেকে ছবি সিলেক্ট করুন</label><input id="profilePicFile" type="file" accept="image/*" style="padding:6px"></div>
+              </div>
+              <button type="submit">প্রোফাইল আপডেট করুন</button>
+            </form>
+          </div>
+
+          <div id="agencyPanel" class="settings-panel">
+            <h3>🏢 এজেন্সি ব্র্যান্ডিং, লোগো, পেমেন্ট নম্বর ও WhatsApp টেমপ্লেট</h3>
+            <p class="muted" style="margin-bottom:14px">এই তথ্যগুলো আপনার সাইডবার, ইনভয়েস এবং WhatsApp রিমাইন্ডারে ব্যবহৃত হবে।</p>
+            <form id="agencyForm">
+              <div class="grid">
+                <div class="field"><label>এজেন্সি / কোম্পানির নাম</label><input id="agName" placeholder="Ads হিসাব ম্যানেজার"></div>
+                <div class="field"><label>ট্যাগলাইন</label><input id="agTagline" placeholder="Smart · Secure · Pro"></div>
+                <div class="field"><label>অফিস ফোন / WhatsApp</label><input id="agPhone" placeholder="017XXXXXXXX"></div>
+                <div class="field"><label>ডিফল্ট ক্লায়েন্ট বিল রেট (৳/$)</label><input id="agDefaultRate" type="number" step=".01" min="1" value="125"></div>
+                <div class="field"><label>ডিফল্ট Meta VAT / ব্যাংক ফি (%)</label><input id="agDefaultFee" type="number" step=".1" min="0" value="0" placeholder="যেমন: 15 বা 0"></div>
+              </div>
+              <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+                <div class="field"><label>এজেন্সি লোগো ছবির লিংক (URL)</label><input id="agLogoUrl" type="url" placeholder="https://.../logo.png (ঐচ্ছিক)"></div>
+                <div class="field"><label>ইনভয়েস স্বাক্ষরের নাম / পদবি</label><input id="agSignText" placeholder="যেমন: Authorized Signature"></div>
+              </div>
+              <div class="field"><label>পেমেন্ট গ্রহণের বিবরণ (ইনভয়েস ও WhatsApp-এ দেখাবে)</label>
+                <input id="agPayInfo" placeholder="যেমন: bKash: 017XXXXXXXX (Personal) | Nagad: 017XXXXXXXX | Bank: ...">
+              </div>
+              <div class="field">
+                <label>WhatsApp বকেয়া রিমাইন্ডার টেমপ্লেট <small class="muted">(ব্যবহার করুন: {name}, {agency}, {bill}, {paid}, {due}, {payinfo})</small></label>
+                <textarea id="agWaTemplate" rows="3" placeholder="আসসালামু আলাইকুম {name}, {agency} থেকে জানাচ্ছি..."></textarea>
+              </div>
+              <button type="submit">এজেন্সি তথ্য সেভ করুন</button>
+            </form>
+          </div>
+
+          <div id="usernamePanel" class="settings-panel">
+            <h3>ইউজারনেম পরিবর্তন</h3>
+            <form id="usernameForm">
+              <div class="field"><label>বর্তমান পাসওয়ার্ড</label>
+                <div class="password-container">
+                  <input id="userChangePass" type="password" required placeholder="বর্তমান পাসওয়ার্ড">
+                  <button type="button" class="toggle-password" onclick="togglePasswordVisibility('userChangePass', this)">👁</button>
+                </div>
+              </div>
+              <div class="field"><label>নতুন ইউজারনেম</label><input id="newUsername" required minlength="3" placeholder="নতুন ইউজারনেম"></div>
+              <button type="submit">ইউজারনেম সেভ করুন</button>
+            </form>
+            <p id="usernameMsg" class="muted" style="margin-top:8px;font-weight:600;color:var(--brand)"></p>
+          </div>
+
+          <div id="passwordPanel" class="settings-panel">
+            <h3>পাসওয়ার্ড পরিবর্তন</h3>
+            <form id="settingsPasswordForm">
+              <div class="field"><label>বর্তমান পাসওয়ার্ড</label>
+                <div class="password-container">
+                  <input id="settingsOldPass" type="password" required placeholder="বর্তমান পাসওয়ার্ড">
+                  <button type="button" class="toggle-password" onclick="togglePasswordVisibility('settingsOldPass', this)">👁</button>
+                </div>
+              </div>
+              <div class="field"><label>নতুন পাসওয়ার্ড</label>
+                <div class="password-container">
+                  <input id="settingsNewPass" type="password" minlength="6" required placeholder="কমপক্ষে ৬ অক্ষর">
+                  <button type="button" class="toggle-password" onclick="togglePasswordVisibility('settingsNewPass', this)">👁</button>
+                </div>
+              </div>
+              <div class="field"><label>নতুন পাসওয়ার্ড আবার</label>
+                <div class="password-container">
+                  <input id="settingsNewPass2" type="password" minlength="6" required placeholder="পুনরায় নতুন পাসওয়ার্ড">
+                  <button type="button" class="toggle-password" onclick="togglePasswordVisibility('settingsNewPass2', this)">👁</button>
+                </div>
+              </div>
+              <button type="submit">পাসওয়ার্ড আপডেট করুন</button>
+            </form>
+            <p id="settingsPasswordMsg" class="muted" style="margin-top:8px;font-weight:600;color:var(--brand)"></p>
+          </div>
+
+          <div id="languagePanel" class="settings-panel">
+            <h3>ভাষা সেটিংস (Language)</h3>
+            <div class="field"><label>ভাষা নির্বাচন</label><select id="languageSelect"><option value="bn">বাংলা (Bengali)</option><option value="en">English</option></select></div>
+            <button type="button" id="applyLanguageBtn">ভাষা পরিবর্তন করুন</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 13: ONLINE + LOCAL TEAM CHAT -->
+    <section id="liveChat">
+      <h2>💬 অনলাইন টিম চ্যাট ও নোট বোর্ড</h2>
+      <div id="liveChatPanel">
+        <div class="chat-side">
+          <h3 style="margin:0 0 8px">টিম চ্যাট ইনবক্স</h3>
+          <p class="muted" style="line-height:1.5">ক্লাউড সিঙ্ক চালু থাকলে সব টিম মেম্বার এখান থেকে লাইভ মেসেজ আদান-প্রদান করতে পারবে।</p>
+          <div class="chat-user"><strong>Team Workspace</strong><br><span class="chat-status">অটো আপডেট চালু</span></div>
+          <button type="button" class="danger sm superadmin-only" style="margin-top:12px;width:100%" id="clearChatBtn">সব চ্যাট পরিষ্কার করুন</button>
+        </div>
+        <div class="chat-main">
+          <div class="chat-head">
+            <div><h3 style="margin:0">Agency Live Team Chat</h3><span class="muted" style="font-size:11px">টিম মেম্বারদের রিয়েল-টাইম মেসেজ</span></div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button type="button" class="secondary sm" id="chatRefreshBtn" title="মেসেজ রিফ্রেশ">🔄</button>
+              <span class="badge-success" id="chatModeBadge">Local Mode</span>
+            </div>
+          </div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <form class="chat-compose" id="chatForm"><input id="chatInput" type="text" placeholder="নোট বা মেসেজ লিখুন..." autocomplete="off" required><button type="submit">পাঠান ➤</button></form>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14: ADMIN PANEL -->
+    <section id="adminPanel">
+      <h2>🛡 অ্যাডমিন সিকিউরিটি, স্টাফ ও ইউজার ম্যানেজমেন্ট</h2>
+      <div class="admin-subtabs">
+        <button type="button" class="secondary active superadmin-only" id="adminTabUsersBtn" onclick="switchAdminSubTab('users')">👥 ইউজার ও স্টাফ</button>
+        <button type="button" class="secondary" id="adminTabHelpBtn" onclick="switchAdminSubTab('help')">📩 হেল্প ইনবক্স <span id="helpOpenBadge" class="badge-danger" style="display:none;margin-left:4px">0</span></button>
+        <button type="button" class="secondary superadmin-only" id="adminTabTrashBtn" onclick="switchAdminSubTab('trash')">🗑️ রিসাইকেল বিন</button>
+        <button type="button" class="secondary superadmin-only" id="adminTabCloudBtn" onclick="switchAdminSubTab('cloud')">☁️ মাস্টার ব্যাকআপ ও সিঙ্ক</button>
+        <button type="button" class="secondary" id="adminTabLogsBtn" onclick="switchAdminSubTab('logs')">📋 অ্যাক্টিভিটি লগ</button>
+      </div>
+
+      <div id="adminUsersSubPanel" class="superadmin-only">
+        <div class="card-add-box">
+          <h3 style="margin:0 0 10px;font-size:14px">➕ সরাসরি নতুন স্টাফ / অ্যাডমিন তৈরি করুন</h3>
+          <form id="adminCreateUserForm">
+            <div class="grid">
+              <div class="field"><label>নাম *</label><input id="auName" required placeholder="স্টাফের নাম"></div>
+              <div class="field"><label>ইউজারনেম *</label><input id="auUsername" required placeholder="যেমন: rahim_staff"></div>
+              <div class="field"><label>মোবাইল / ইমেইল</label><input id="auContact" placeholder="017... বা email"></div>
+              <div class="field"><label>পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) *</label><input id="auPass" type="password" minlength="6" required placeholder="******"></div>
+              <div class="field"><label>রোল (Permission)</label>
+                <select id="auRole">
+                  <option value="staff">Staff (প্রফিট ও কার্ড রেট দেখবে না)</option>
+                  <option value="admin">Admin (আলাদা ওয়ার্কস্পেস)</option>
+                  <option value="user">Separate User (আলাদা ওয়ার্কস্পেস)</option>
+                </select>
+              </div>
+              <div class="field" style="display:flex;align-items:end"><button type="submit" style="width:100%">অ্যাকাউন্ট তৈরি করুন</button></div>
+            </div>
+            <div id="auPermsWrap" style="margin-top:6px">
+              <label>স্টাফের অনুমতি (Permissions):</label>
+              <div class="perm-grid">
+                <label class="perm-item"><input type="checkbox" id="auPermDel"> ডেটা ডিলিট করতে পারবে</label>
+                <label class="perm-item"><input type="checkbox" id="auPermEdit" checked> পুরোনো ডেটা এডিট পারবে</label>
+                <label class="perm-item"><input type="checkbox" id="auPermPay" checked> পেমেন্ট ও বকেয়া দেখতে পারবে</label>
+                <label class="perm-item"><input type="checkbox" id="auPermExp" checked> অফিস খরচ দেখতে পারবে</label>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card m1"><small>মোট ইউজার</small><strong id="saTotal">—</strong></div>
+          <div class="metric-card m2"><small>অ্যাডমিন / স্টাফ</small><strong id="saAdmins">—</strong></div>
+          <div class="metric-card m3"><small>সাধারণ ইউজার</small><strong id="saUsers">—</strong></div>
+          <div class="metric-card m4"><small>ব্লকড ইউজার</small><strong id="saSuspended">—</strong></div>
+        </div>
+        <h3>ইউজার অ্যাক্সেস কন্ট্রোল ও লগইন তথ্য</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>ID No.</th><th>User</th><th>যোগাযোগ</th><th>Role / হিসাব</th><th>শেষ লগইন</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="saUserRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="adminHelpSubPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">📩 সাইন-ইন পেজ থেকে আসা হেল্প মেসেজ ও অনুরোধ</h3>
+          <button type="button" class="danger sm" onclick="clearAllHelpRequests()">সব মেসেজ মুছুন</button>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>সময়</th><th>প্রাপক ও বিষয়</th><th>প্রেরক</th><th>বার্তা</th><th>অবস্থা</th><th>অ্যাকশন</th></tr></thead>
+            <tbody id="helpReqRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="adminTrashSubPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">🗑️ রিসাইকেল বিন (ডিলিট করা ডেটা পুনরুদ্ধার)</h3>
+          <button type="button" class="danger sm" onclick="emptyTrash()">ট্র্যাশ সম্পূর্ণ খালি করুন</button>
+        </div>
+        <div class="tablewrap" style="max-height:450px">
+          <table>
+            <thead><tr><th>ধরণ</th><th>বিবরণ</th><th>ডিলিটের সময় ও ব্যক্তি</th><th>অ্যাকশন</th></tr></thead>
+            <tbody id="trashRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="adminCloudSubPanel" style="display:none">
+        <div class="card-add-box">
+          <h3 style="margin:0 0 8px">👑 মাস্টার ফুল ব্যাকআপ (সব ইউজার + সব ওয়ার্কস্পেস + হেল্প ইনবক্স)</h3>
+          <p class="muted" style="margin:0 0 12px">সাধারণ JSON ব্যাকআপ শুধু একটি অ্যাকাউন্টের ডেটা সেভ করে। এটি আপনার পুরো সিস্টেমের সব ইউজার, স্টাফ পারমিশন ও সবার ডেটা এক ফাইলে সংরক্ষণ করবে।</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="button" id="masterBackupBtn">👑 মাস্টার ফুল ব্যাকআপ ডাউনলোড</button>
+            <label class="secondary" style="padding:10px 16px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;margin:0;background:#e2e8f0;color:#1e293b;font-weight:600;font-size:13px">
+              <input type="file" id="masterRestoreFile" accept=".json" style="display:none">
+              <span>📥 মাস্টার ব্যাকআপ রিস্টোর</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card-add-box">
+          <h3 style="margin:0 0 8px">☁️ ক্লাউড সিঙ্ক (Firebase Realtime Database — অনলাইন চ্যাট ও মাল্টি-ডিভাইস)</h3>
+          <p class="muted" style="margin:0 0 12px">পিসি ও স্টাফের মোবাইলে একই লাইভ ডেটা ও অনলাইন চ্যাট চালু করতে আপনার Firebase Realtime Database-এর URL দিন। (খালি রাখলে অফলাইন চলবে)</p>
+          <form id="cloudSyncForm">
+            <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+              <div class="field"><label>Firebase Database URL</label><input id="csUrl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com"></div>
+              <div class="field"><label>Database Secret / Auth (ঐচ্ছিক)</label><input id="csSecret" type="password" placeholder="ঐচ্ছিক"></div>
+            </div>
+            <label class="perm-item" style="margin-bottom:12px"><input type="checkbox" id="csAutoSync"> প্রতিবার সেভ করলে অটোমেটিক ক্লাউডে ব্যাকআপ (Auto Push) হবে</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="submit">💾 সিঙ্ক সেটিংস সেভ</button>
+              <button type="button" id="csPushBtn" class="secondary">⬆️ ক্লাউডে পাঠান (Push)</button>
+              <button type="button" id="csPullBtn" class="secondary">⬇️ ক্লাউড থেকে আনুন (Pull)</button>
+              <span id="csLastSyncText" class="muted"></span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="adminLogsSubPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h3 style="margin:0">📋 সিস্টেম অ্যাক্টিভিটি লগ</h3>
+          <button type="button" class="danger sm" onclick="db.activityLogs=[];save();renderAdminPanel();toast('অ্যাক্টিভিটি লগ পরিষ্কার হয়েছে','warn')">লগ পরিষ্কার করুন</button>
+        </div>
+        <div class="tablewrap" style="max-height:450px">
+          <table>
+            <thead><tr><th>সময়</th><th>অ্যাক্টিভিটি বিবরণ</th></tr></thead>
+            <tbody id="activityLogRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button type="button" class="float-fab noprint" id="floatActionBtn" title="দ্রুত নতুন কাজ যোগ করুন" onclick="goToSection('works')">+</button>
+
+<script src="app.js"></script>
+</body>
+</html>
