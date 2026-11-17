@@ -163,6 +163,121 @@ function cardAvgRate(cardId) {
   return totalUsd > 0 ? +(totalTk / totalUsd).toFixed(2) : 0;
 }
 
+// Cloud Account, Help & Workspace Helpers
+function readCloudSync() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CLOUD_SYNC_KEY) || '{}');
+    if (!saved.url && DEFAULT_CLOUD_URL) saved.url = DEFAULT_CLOUD_URL;
+    if (DEFAULT_CLOUD_URL && saved.autoSync === undefined) saved.autoSync = true;
+    return saved;
+  } catch (e) {
+    return DEFAULT_CLOUD_URL ? { url: DEFAULT_CLOUD_URL, autoSync: true } : {};
+  }
+}
+function writeCloudSync(cfg) { try { localStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify(cfg)); } catch (e) {} }
+
+function buildNodeEndpoint(nodePath) {
+  const cfg = readCloudSync();
+  const clean = String(cfg.url || '').trim().replace(/\/+$/, '');
+  if (!clean) return '';
+  return `${clean}/${nodePath}.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '');
+}
+
+async function syncSingleAccountToCloud(account) {
+  if (!account || !account.id || account.id === 'legacy-super-admin') return;
+  const ep = buildNodeEndpoint(`ads_hisab_accounts_v72/${encodeURIComponent(account.id)}`);
+  if (!ep) return;
+  try {
+    await fetch(ep, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(account) });
+  } catch (e) {}
+}
+
+async function deleteAccountFromCloud(userId) {
+  const ep = buildNodeEndpoint(`ads_hisab_accounts_v72/${encodeURIComponent(userId)}`);
+  if (!ep) return;
+  try { await fetch(ep, { method: 'DELETE' }); } catch (e) {}
+}
+
+async function pullAccountsFromCloud() {
+  const ep = buildNodeEndpoint('ads_hisab_accounts_v72');
+  if (!ep) return;
+  try {
+    const res = await fetch(ep);
+    if (!res.ok) return;
+    const data = await res.json();
+    const local = readLocalAccounts();
+    if (data === null) {
+      for (const acc of local) {
+        if (acc && acc.id) await syncSingleAccountToCloud(acc);
+      }
+      return;
+    }
+    if (typeof data === 'object') {
+      const cloudList = Object.values(data).filter(a => a && a.id);
+      localStorage.setItem(ACCOUNTSKEY, JSON.stringify(cloudList));
+      const maxNum = cloudList.reduce((m, a) => Math.max(m, Number(a.userNumber) || 1), 1);
+      const curNext = Number(localStorage.getItem(NEXTUSERIDKEY) || 2);
+      if (maxNum + 1 > curNext) localStorage.setItem(NEXTUSERIDKEY, String(maxNum + 1));
+    }
+  } catch (e) {}
+}
+
+async function syncHelpReqToCloud(req) {
+  if (!req || !req.id) return;
+  const ep = buildNodeEndpoint(`ads_hisab_help_v72/${encodeURIComponent(req.id)}`);
+  if (!ep) return;
+  try {
+    await fetch(ep, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) });
+  } catch (e) {}
+}
+
+async function deleteHelpReqFromCloud(id) {
+  const ep = buildNodeEndpoint(id ? `ads_hisab_help_v72/${encodeURIComponent(id)}` : 'ads_hisab_help_v72');
+  if (!ep) return;
+  try { await fetch(ep, { method: 'DELETE' }); } catch (e) {}
+}
+
+async function pullHelpRequestsFromCloud() {
+  const ep = buildNodeEndpoint('ads_hisab_help_v72');
+  if (!ep) return;
+  try {
+    const res = await fetch(ep);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data === null) {
+      writeHelpRequests([]);
+      return;
+    }
+    if (typeof data === 'object') {
+      const list = Object.values(data).filter(x => x && x.id).reverse();
+      writeHelpRequests(list);
+    }
+  } catch (e) {}
+}
+
+async function pushUserWorkspaceToCloud(userId, dataObj) {
+  if (!userId) return;
+  const ep = buildNodeEndpoint(`ads_hisab_workspaces_v72/${encodeURIComponent(userId)}`);
+  if (!ep) return;
+  try {
+    await fetch(ep, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataObj) });
+  } catch (e) {}
+}
+
+async function pullUserWorkspaceFromCloud(userId) {
+  if (!userId) return;
+  const ep = buildNodeEndpoint(`ads_hisab_workspaces_v72/${encodeURIComponent(userId)}`);
+  if (!ep) return;
+  try {
+    const res = await fetch(ep);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && typeof data === 'object') {
+      localStorage.setItem('ads_hisab_user_data_v72_' + userId, JSON.stringify(normalizeDb(data)));
+    }
+  } catch (e) {}
+}
+
 let autoSyncTimer = null;
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
@@ -170,7 +285,10 @@ function save() {
   const syncCfg = readCloudSync();
   if (syncCfg.autoSync && syncCfg.url) {
     clearTimeout(autoSyncTimer);
-    autoSyncTimer = setTimeout(() => pushToCloud(true), 1200);
+    autoSyncTimer = setTimeout(() => {
+      if (isSuperAdmin() || isStaff()) pushToCloud(true);
+      else if (activeAccount?.id) pushUserWorkspaceToCloud(activeAccount.id, db);
+    }, 1200);
   }
   render();
 }
@@ -381,7 +499,11 @@ document.querySelectorAll('.side-menu button').forEach(b => b.onclick = () => {
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === b.dataset.tab));
   toggleMobileMenu(false);
   render();
-  if (b.dataset.tab === 'adminPanel') switchAdminSubTab(isSuperAdmin() ? 'users' : 'help');
+  if (b.dataset.tab === 'adminPanel') {
+    switchAdminSubTab(isSuperAdmin() ? 'users' : 'help');
+    if (isSuperAdmin()) pullAccountsFromCloud().then(() => renderAdminPanel());
+    pullHelpRequestsFromCloud().then(() => { renderAdminPanel(); updateNotifications(); });
+  }
   if (b.dataset.tab === 'monthly') renderMonthlyReport();
   if (b.dataset.tab === 'liveChat') refreshOnlineChat();
 });
@@ -492,7 +614,7 @@ window.togglePasswordVisibility = function(fieldId, btnEl) {
   btnEl.textContent = f.type === 'password' ? '👁' : '🙈';
 };
 
-// Help Inbox (Sign-in Page Support)
+// Help Inbox (Sign-in Page Support + Cloud Sync)
 function readHelpRequests() { try { return JSON.parse(localStorage.getItem(HELP_REQUESTS_KEY) || '[]'); } catch (e) { return []; } }
 function writeHelpRequests(arr) { try { localStorage.setItem(HELP_REQUESTS_KEY, JSON.stringify(arr)); } catch (e) {} }
 
@@ -510,17 +632,19 @@ if ($('loginHelpBtn')) $('loginHelpBtn').onclick = () => {
   $('loginHelpModal').style.display = 'flex';
 };
 
-if ($('loginHelpForm')) $('loginHelpForm').onsubmit = e => {
+if ($('loginHelpForm')) $('loginHelpForm').onsubmit = async e => {
   e.preventDefault();
-  const arr = readHelpRequests();
-  arr.unshift({
+  const req = {
     id: uid(), time: new Date().toLocaleString('bn-BD'),
     target: $('lhTarget').value, name: $('lhName').value.trim(),
     contact: $('lhContact').value.trim(), topic: $('lhTopic').value,
     message: $('lhMessage').value.trim(), status: 'open'
-  });
+  };
+  const arr = readHelpRequests();
+  arr.unshift(req);
   if (arr.length > 100) arr.pop();
   writeHelpRequests(arr);
+  await syncHelpReqToCloud(req);
   closeModal('loginHelpModal');
   toast('আপনার বার্তাটি Admin / Super Admin-এর ইনবক্সে পাঠানো হয়েছে!');
 };
@@ -528,16 +652,17 @@ if ($('loginHelpForm')) $('loginHelpForm').onsubmit = e => {
 window.resolveHelpReq = function(id) {
   const arr = readHelpRequests(), item = arr.find(x => x.id === id); if (!item) return;
   item.status = item.status === 'resolved' ? 'open' : 'resolved';
-  writeHelpRequests(arr); renderAdminPanel(); updateNotifications();
+  writeHelpRequests(arr); syncHelpReqToCloud(item); renderAdminPanel(); updateNotifications();
   toast(item.status === 'resolved' ? 'সমাধান হিসেবে চিহ্নিত হয়েছে!' : 'পুনরায় Open করা হয়েছে');
 };
 window.deleteHelpReq = function(id) {
   writeHelpRequests(readHelpRequests().filter(x => x.id !== id));
+  deleteHelpReqFromCloud(id);
   renderAdminPanel(); updateNotifications(); toast('মেসেজ মুছে ফেলা হয়েছে', 'warn');
 };
 window.clearAllHelpRequests = function() {
   if (!confirm('সব হেল্প মেসেজ মুছে ফেলতে চান?')) return;
-  writeHelpRequests([]); renderAdminPanel(); updateNotifications(); toast('হেল্প ইনবক্স পরিষ্কার হয়েছে', 'warn');
+  writeHelpRequests([]); deleteHelpReqFromCloud(''); renderAdminPanel(); updateNotifications(); toast('হেল্প ইনবক্স পরিষ্কার হয়েছে', 'warn');
 };
 
 // Account & Auth System
@@ -556,6 +681,10 @@ window.performLocalLogout = function() {
   localStorage.removeItem(REMEMBER_LOGIN_KEY);
   activeAccount = null;
   realSuperAdmin = null;
+  dashFilterFrom = '';
+  dashFilterTo = '';
+  if ($('dashFrom')) $('dashFrom').value = '';
+  if ($('dashTo')) $('dashTo').value = '';
   if ($('impersonateBanner')) $('impersonateBanner').style.display = 'none';
   document.body.classList.remove('role-staff', 'role-superadmin', 'no-perm-del', 'no-perm-edit', 'no-perm-pay', 'no-perm-exp');
   KEY = MASTER_DB_KEY;
@@ -572,12 +701,18 @@ window.performLocalLogout = function() {
   toast('সফলভাবে লগ আউট হয়েছে');
 };
 
-window.login = function() {
+window.login = async function() {
   const identity = ($('loginUser')?.value || '').trim().toLowerCase();
   const pass = $('loginPass')?.value || '';
   if (!identity || !pass) { if ($('authMsg')) $('authMsg').textContent = 'ইউজারনেম ও পাসওয়ার্ড দিন।'; return; }
-  const accounts = readLocalAccounts();
+
+  let accounts = readLocalAccounts();
   let accIdx = accounts.findIndex(a => [a.username, a.email, a.phone].some(v => String(v || '').trim().toLowerCase() === identity) && checkPass(pass, a.password));
+  if (accIdx === -1 && identity !== 'admin' && navigator.onLine) {
+    await pullAccountsFromCloud();
+    accounts = readLocalAccounts();
+    accIdx = accounts.findIndex(a => [a.username, a.email, a.phone].some(v => String(v || '').trim().toLowerCase() === identity) && checkPass(pass, a.password));
+  }
   let account = accIdx !== -1 ? accounts[accIdx] : null;
   if (account && !String(account.password).startsWith('h1_')) {
     accounts[accIdx].password = hashPass(pass);
@@ -597,11 +732,22 @@ window.login = function() {
     const meta = readSuperAdminMeta();
     meta.lastLogin = nowStr; meta.loginCount = num(meta.loginCount) + 1;
     localStorage.setItem(SUPERADMIN_META_KEY, JSON.stringify(meta));
+    if (navigator.onLine) {
+      await pullAccountsFromCloud();
+      await pullHelpRequestsFromCloud();
+    }
   } else if (accIdx !== -1) {
     accounts[accIdx].lastLogin = nowStr;
     accounts[accIdx].loginCount = num(accounts[accIdx].loginCount) + 1;
     localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
     account = accounts[accIdx];
+    syncSingleAccountToCloud(account);
+    if (account.role !== 'staff' && navigator.onLine) {
+      await pullUserWorkspaceFromCloud(account.id);
+    }
+    if (account.role === 'admin' && navigator.onLine) {
+      await pullHelpRequestsFromCloud();
+    }
   }
 
   if ($('rememberLogin')?.checked) localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({ identity, pass }));
@@ -643,7 +789,7 @@ if ($('backToLoginBtn')) $('backToLoginBtn').onclick = () => {
   if ($('authMsg')) $('authMsg').textContent = '';
 };
 
-if ($('registerBtn')) $('registerBtn').onclick = () => {
+if ($('registerBtn')) $('registerBtn').onclick = async () => {
   const name = $('regName')?.value.trim();
   const username = ($('regUsername')?.value || '').trim().toLowerCase();
   const email = ($('regEmail')?.value || '').trim().toLowerCase();
@@ -656,6 +802,7 @@ if ($('registerBtn')) $('registerBtn').onclick = () => {
   if (pass.length < 6) { $('authMsg').textContent = 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।'; return; }
   if (pass !== pass2) { $('authMsg').textContent = 'পাসওয়ার্ড মিলছে না।'; return; }
 
+  if (navigator.onLine) await pullAccountsFromCloud();
   const accounts = readLocalAccounts();
   if (accounts.some(a => a.username === username || a.email === email)) {
     $('authMsg').textContent = 'এই ইউজারনেম বা ইমেইল দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে।';
@@ -667,6 +814,8 @@ if ($('registerBtn')) $('registerBtn').onclick = () => {
   accounts.push(account);
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
   localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
+
+  await syncSingleAccountToCloud(account);
 
   activeAccount = account;
   realSuperAdmin = null;
@@ -694,8 +843,9 @@ if ($('forgotUserBtn')) $('forgotUserBtn').onclick = () => {
   $('recNewPassWrap').style.display = 'none'; $('recNewPass').required = false;
   $('recoveryForm').reset(); $('recoveryModal').style.display = 'flex';
 };
-if ($('recoveryForm')) $('recoveryForm').onsubmit = e => {
+if ($('recoveryForm')) $('recoveryForm').onsubmit = async e => {
   e.preventDefault();
+  if (navigator.onLine) await pullAccountsFromCloud();
   const mode = $('recoveryMode').value, email = $('recEmail').value.trim().toLowerCase(), phone = $('recPhone').value.trim();
   const accounts = readLocalAccounts();
   const idx = accounts.findIndex(a => String(a.email || '').trim().toLowerCase() === email && String(a.phone || '').trim() === phone);
@@ -724,6 +874,7 @@ if ($('recoveryForm')) $('recoveryForm').onsubmit = e => {
     if (np.length < 6) { toast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন', 'error'); return; }
     accounts[idx].password = hashPass(np);
     localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+    await syncSingleAccountToCloud(accounts[idx]);
     toast('পাসওয়ার্ড সফলভাবে রিসেট হয়েছে! এখন লগইন করুন।'); closeModal('recoveryModal');
   }
 };
@@ -839,7 +990,11 @@ function saveProfileData(name, email, phone, pic) {
     activeAccount.name = name; activeAccount.email = email; activeAccount.phone = phone;
     if (activeAccount.id !== 'legacy-super-admin') {
       const accounts = readLocalAccounts(), idx = accounts.findIndex(a => a.id === activeAccount.id);
-      if (idx !== -1) { accounts[idx].name = name; accounts[idx].email = email; accounts[idx].phone = phone; localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
+      if (idx !== -1) {
+        accounts[idx].name = name; accounts[idx].email = email; accounts[idx].phone = phone;
+        localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+        syncSingleAccountToCloud(accounts[idx]);
+      }
     }
   }
   if ($('profilePicFile')) $('profilePicFile').value = '';
@@ -861,11 +1016,16 @@ if ($('settingsPasswordForm')) $('settingsPasswordForm').onsubmit = e => {
     if (!checkPass(oldPass, activeAccount.password)) { msgEl.textContent = 'বর্তমান পাসওয়ার্ড সঠিক নয়!'; return; }
     activeAccount.password = hashPass(newPass);
     const accounts = readLocalAccounts(), idx = accounts.findIndex(a => a.id === activeAccount.id);
-    if (idx !== -1) { accounts[idx] = activeAccount; localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
+    if (idx !== -1) {
+      accounts[idx] = activeAccount;
+      localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+      syncSingleAccountToCloud(accounts[idx]);
+    }
   } else {
     const currentSuperPass = localStorage.getItem(PASSKEY) || '123456789';
     if (!checkPass(oldPass, currentSuperPass)) { msgEl.textContent = 'বর্তমান পাসওয়ার্ড সঠিক নয়!'; return; }
     localStorage.setItem(PASSKEY, hashPass(newPass));
+    if (readCloudSync().autoSync) pushToCloud(true);
   }
   const rem = localStorage.getItem(REMEMBER_LOGIN_KEY);
   if (rem) { try { const parsed = JSON.parse(rem); parsed.pass = newPass; localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify(parsed)); } catch (err) {} }
@@ -883,7 +1043,11 @@ if ($('usernameForm')) $('usernameForm').onsubmit = e => {
     if (accounts.some(a => a.id !== activeAccount.id && a.username === newU)) { msgEl.textContent = 'এই ইউজারনেম আগেই নেওয়া হয়েছে!'; return; }
     activeAccount.username = newU;
     const idx = accounts.findIndex(a => a.id === activeAccount.id);
-    if (idx !== -1) { accounts[idx] = activeAccount; localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
+    if (idx !== -1) {
+      accounts[idx] = activeAccount;
+      localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+      syncSingleAccountToCloud(accounts[idx]);
+    }
     const rem = localStorage.getItem(REMEMBER_LOGIN_KEY);
     if (rem) { try { const parsed = JSON.parse(rem); parsed.identity = newU; localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify(parsed)); } catch (err) {} }
     msgEl.textContent = 'ইউজারনেম সফলভাবে আপডেট হয়েছে!';
@@ -1068,7 +1232,7 @@ window.openClientProfile = function(custId) {
   $('clientProfileModal').style.display = 'flex';
 };
 
-// Invoice Modal (Date Range + Logo + Signature + Payment History + Pay Info + PNG)
+// Invoice Modal
 let currentInvoiceCustId = null;
 function getInvoiceFilteredData(custId) {
   const from = $('invFrom')?.value || '', to = $('invTo')?.value || '';
@@ -1279,7 +1443,7 @@ window.downloadInvoicePng = function() {
   }, 'image/png');
 };
 
-// Cards & Deposits + Card Statement + Edit Card
+// Cards & Deposits
 if ($('addCardForm')) $('addCardForm').onsubmit = e => {
   e.preventDefault();
   const name = $('newCardInput').value.trim(); if (!name) return;
@@ -1414,7 +1578,7 @@ window.deleteRate = function(id) {
   db.rates = db.rates.filter(x => x.id !== id); save(); toast('রেট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// Works + Progress Bar + Quick Spend
+// Works
 window.quickAddSpend = function(workId) {
   const w = db.works.find(x => x.id === workId); if (!w) return;
   const add = prompt(`"${w.name}"-এ নতুন কত ডলার ($) খরচ যোগ করবেন?`, '10');
@@ -1963,11 +2127,11 @@ if ($('workSearch')) $('workSearch').oninput = render;
 if ($('workStatusFilter')) $('workStatusFilter').onchange = render;
 if ($('workCustomerFilter')) $('workCustomerFilter').onchange = render;
 
-// Admin Panel: Super Admin Locks, Permissions, Impersonate, Help Inbox, Trash, Master Backup & Cloud Sync
+// Admin Panel
 if ($('auRole')) $('auRole').onchange = () => { if ($('auPermsWrap')) $('auPermsWrap').style.display = $('auRole').value === 'staff' ? 'block' : 'none'; };
 if ($('euRole')) $('euRole').onchange = () => { if ($('euPermsWrap')) $('euPermsWrap').style.display = $('euRole').value === 'staff' ? 'block' : 'none'; };
 
-if ($('adminCreateUserForm')) $('adminCreateUserForm').onsubmit = e => {
+if ($('adminCreateUserForm')) $('adminCreateUserForm').onsubmit = async e => {
   e.preventDefault();
   if (!isSuperAdmin()) return toast('শুধু Super Admin ইউজার তৈরি করতে পারবেন!', 'error');
   const name = $('auName').value.trim(), username = $('auUsername').value.trim().toLowerCase();
@@ -1992,6 +2156,7 @@ if ($('adminCreateUserForm')) $('adminCreateUserForm').onsubmit = e => {
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
   localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
   localStorage.setItem('ads_hisab_user_profile_v72_' + newAcc.id, JSON.stringify({ name, email: newAcc.email, phone: newAcc.phone, pic: '' }));
+  await syncSingleAccountToCloud(newAcc);
   logActivity(`নতুন ${role} অ্যাকাউন্ট তৈরি: ${name} (@${username})`);
   e.target.reset();
   if ($('auPermEdit')) $('auPermEdit').checked = true;
@@ -2022,7 +2187,7 @@ window.openEditUserModal = function(userId) {
   $('editUserModal').style.display = 'flex';
 };
 
-if ($('editUserForm')) $('editUserForm').onsubmit = e => {
+if ($('editUserForm')) $('editUserForm').onsubmit = async e => {
   e.preventDefault();
   if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   const id = $('euId').value;
@@ -2050,15 +2215,17 @@ if ($('editUserForm')) $('editUserForm').onsubmit = e => {
     };
   }
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+  await syncSingleAccountToCloud(accounts[idx]);
   logActivity(`ইউজার আপডেট: ${accounts[idx].name} (@${newU})`);
   closeModal('editUserModal');
   renderAdminPanel();
   toast('ইউজারের তথ্য ও পারমিশন আপডেট হয়েছে!');
 };
 
-window.impersonateUser = function(userId) {
+window.impersonateUser = async function(userId) {
   if (!isSuperAdmin()) return toast('শুধুমাত্র সুপার অ্যাডমিন এটি ব্যবহার করতে পারবেন!', 'error');
   const acc = readLocalAccounts().find(a => a.id === userId); if (!acc) return;
+  if (navigator.onLine) await pullUserWorkspaceFromCloud(userId);
   if (!realSuperAdmin) realSuperAdmin = activeAccount;
   activeAccount = acc;
   applyPermissionClasses();
@@ -2092,20 +2259,22 @@ window.switchAdminSubTab = function(tabName) {
   renderAdminPanel();
 };
 
-window.toggleUserStatus = function(userId) {
+window.toggleUserStatus = async function(userId) {
   if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   const accounts = readLocalAccounts(), acc = accounts.find(a => a.id === userId); if (!acc) return;
   acc.status = acc.status === 'suspended' ? 'active' : 'suspended';
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
+  await syncSingleAccountToCloud(acc);
   logActivity(`স্ট্যাটাস পরিবর্তন: ${acc.name} -> ${acc.status}`);
   toast(`${acc.name} এখন ${acc.status === 'suspended' ? 'ব্লকড' : 'সচল'}`); renderAdminPanel();
 };
-window.deleteAccount = function(userId) {
+window.deleteAccount = async function(userId) {
   if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   if (!confirm('এই ইউজারের অ্যাকাউন্ট ও সমস্ত ডেটা স্থায়ীভাবে ডিলিট করতে চান?')) return;
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(readLocalAccounts().filter(a => a.id !== userId)));
   localStorage.removeItem('ads_hisab_user_data_v72_' + userId);
   localStorage.removeItem('ads_hisab_user_profile_v72_' + userId);
+  await deleteAccountFromCloud(userId);
   logActivity(`অ্যাকাউন্ট ডিলিট: ${userId}`); toast('অ্যাকাউন্ট ডিলিট হয়েছে!', 'warn'); renderAdminPanel();
 };
 
@@ -2251,17 +2420,6 @@ if ($('masterRestoreFile')) $('masterRestoreFile').onchange = e => {
   reader.readAsText(file);
 };
 
-function readCloudSync() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CLOUD_SYNC_KEY) || '{}');
-    if (!saved.url && DEFAULT_CLOUD_URL) saved.url = DEFAULT_CLOUD_URL;
-    if (DEFAULT_CLOUD_URL && saved.autoSync === undefined) saved.autoSync = true;
-    return saved;
-  } catch (e) {
-    return DEFAULT_CLOUD_URL ? { url: DEFAULT_CLOUD_URL, autoSync: true } : {};
-  }
-}
-function writeCloudSync(cfg) { try { localStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify(cfg)); } catch (e) {} }
 function buildCloudEndpoint(url, secret) {
   const clean = String(url || '').trim().replace(/\/+$/, '');
   if (!clean) return '';
@@ -2298,6 +2456,8 @@ async function pullFromCloud(silent = false, customUrl = '', customSecret = '') 
       return false;
     }
     applyMasterSnapshot(data);
+    await pullAccountsFromCloud();
+    await pullHelpRequestsFromCloud();
     writeCloudSync({ ...cfg, url, secret, lastSync: new Date().toLocaleString('bn-BD') });
     if (!silent) toast('ক্লাউড থেকে সব ডেটা সফলভাবে সিঙ্ক হয়েছে!');
     return true;
@@ -2314,10 +2474,14 @@ if ($('cloudSyncForm')) $('cloudSyncForm').onsubmit = e => {
   writeCloudSync({ ...cfg, url: $('csUrl').value.trim(), secret: $('csSecret').value.trim(), autoSync: $('csAutoSync').checked });
   toast('ক্লাউড সিঙ্ক সেটিংস সেভ হয়েছে!');
 };
-if ($('csPushBtn')) $('csPushBtn').onclick = () => { if (isSuperAdmin()) pushToCloud(false); };
+if ($('csPushBtn')) $('csPushBtn').onclick = async () => {
+  if (!isSuperAdmin()) return;
+  await pushToCloud(false);
+  for (const a of readLocalAccounts()) await syncSingleAccountToCloud(a);
+};
 if ($('csPullBtn')) $('csPullBtn').onclick = () => { if (isSuperAdmin() && confirm('ক্লাউডের ডেটা দিয়ে এই ডিভাইসের বর্তমান ডেটা আপডেট করতে চান?')) pullFromCloud(false); };
 
-// Export CSV (UTF-8 BOM) & Workspace Backup
+// Export CSV & Workspace Backup
 function downloadBlob(content, filename, mime) {
   const blob = new Blob([content], { type: mime }), url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = filename;
@@ -2478,17 +2642,19 @@ let refreshOnlineChat = () => {};
   ['mousemove','keydown','click','touchstart'].forEach(ev => document.addEventListener(ev, resetIdle, { passive: true }));
 })();
 
-// Startup: Auto Cloud Pull (if DEFAULT_CLOUD_URL is set) & Auto-Login
+// Startup: Auto Cloud Pull & Auto-Login
 (async function bootApp() {
   if (DEFAULT_CLOUD_URL && navigator.onLine) {
     await pullFromCloud(true, DEFAULT_CLOUD_URL, '');
+    await pullAccountsFromCloud();
+    await pullHelpRequestsFromCloud();
   }
   const savedLogin = (() => { try { return JSON.parse(localStorage.getItem(REMEMBER_LOGIN_KEY) || 'null'); } catch (e) { return null; } })();
   if (savedLogin && savedLogin.identity && savedLogin.pass) {
     if ($('loginUser')) $('loginUser').value = savedLogin.identity;
     if ($('loginPass')) $('loginPass').value = savedLogin.pass;
     if ($('rememberLogin')) $('rememberLogin').checked = true;
-    window.login();
+    await window.login();
   } else {
     updateHeaderAndProfile(); render(); updateWorkPreview(); generatePixelCode(); renderMonthlyReport();
   }
