@@ -1,5 +1,5 @@
-const CACHE_NAME = 'ads-hisab-pwa-v74';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
+const CACHE_NAME = 'ads-hisab-pwa-v75';
+const ASSETS = ['./', './index.html', './style.css?v=75', './app.js?v=75', './manifest.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).catch(() => {}));
