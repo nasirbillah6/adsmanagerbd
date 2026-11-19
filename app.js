@@ -12,6 +12,7 @@ const SUPERADMIN_META_KEY = 'ads_hisab_superadmin_meta_v72';
 const LOCAL_DIRTY_KEY = 'ads_hisab_local_dirty_v73';
 const LAST_CLOUD_TS_KEY = 'ads_hisab_last_cloud_ts_v73';
 const DEFAULT_CLOUD_URL = 'https://ads-managerbd-default-rtdb.firebaseio.com/';
+const DEFAULT_WALLETS = ['bKash', 'Nagad', 'Rocket', 'Bank', 'Cash', 'Card'];
 
 let KEY = MASTER_DB_KEY;
 let PROFILEKEY = 'ads_hisab_user_profile_v72_legacy-super-admin';
@@ -22,6 +23,7 @@ let deferredInstallPrompt = null;
 
 const PAGE_SIZE = 25;
 let custPage = 1, workPage = 1, payPage = 1;
+const selectedWorkIds = new Set();
 
 const $ = id => document.getElementById(id);
 const today = () => { const d = new Date(), z = d.getTimezoneOffset(); return new Date(d.getTime() - z * 60000).toISOString().slice(0, 10); };
@@ -97,21 +99,23 @@ window.matchBudgetDollar = function() {
 const DEFAULT_WA_TEMPLATE = 'আসসালামু আলাইকুম {name}, {agency} থেকে জানাচ্ছি—আপনার বিজ্ঞাপনের মোট বিল {bill}, জমা {paid}, এবং বকেয়া রয়েছে {due}। অনুগ্রহ করে বকেয়া পরিশোধ করার জন্য অনুরোধ রইল। {payinfo} ধন্যবাদ!';
 
 const blank = () => ({
-  updatedAt: 0, deletedIds: {},
+  updatedAt: 0, deletedIds: {}, wallets: [...DEFAULT_WALLETS],
   rates: [], customers: [], pages: [], works: [], payments: [],
   cardDeposits: [], cardTransfers: [], cardRefunds: [],
   adAccounts: [], cashAdjustments: [],
   cards: [], expenses: [], trash: [], reminderLogs: {}, activityLogs: [],
-  agency: { name: 'Ads হিসাব ম্যানেজার', tagline: 'Smart · Secure · Pro v73', phone: '', defaultRate: 125, defaultFeePct: 0, logoUrl: '', qrUrl: '', signText: '', payInfo: '', waTemplate: DEFAULT_WA_TEMPLATE }
+  agency: { name: 'Ads হিসাব ম্যানেজার', tagline: 'Smart · Secure · Pro v74', phone: '', defaultRate: 125, defaultFeePct: 0, monthlyGoal: 100000, logoUrl: '', qrUrl: '', signText: '', payInfo: '', metaToken: '', waTemplate: DEFAULT_WA_TEMPLATE }
 });
 
 let db = blank();
 function normalizeDb(raw) {
   const b = blank();
   const parsed = (raw && typeof raw === 'object') ? raw : {};
+  const wallets = Array.isArray(parsed.wallets) && parsed.wallets.length ? [...new Set(parsed.wallets.map(x => String(x).trim()).filter(Boolean))] : [...DEFAULT_WALLETS];
   return {
     updatedAt: num(parsed.updatedAt),
     deletedIds: (parsed.deletedIds && typeof parsed.deletedIds === 'object') ? parsed.deletedIds : {},
+    wallets,
     rates: Array.isArray(parsed.rates) ? parsed.rates : [],
     customers: Array.isArray(parsed.customers) ? parsed.customers : [],
     pages: Array.isArray(parsed.pages) ? parsed.pages : [],
@@ -179,6 +183,7 @@ const baseActual = w => num(w.actualDollar) * num(w.actualRate);
 const feeCost = w => baseActual(w) * (num(w.feePct) / 100);
 const actual = w => baseActual(w) + feeCost(w);
 const profit = w => bill(w) - actual(w) - num(w.other);
+const workCommission = w => num(w.commPct) > 0 ? Math.max(0, profit(w)) * (num(w.commPct) / 100) : 0;
 const paid = id => db.payments.filter(p => p.customerId === id).reduce((s, p) => s + num(p.amount), 0);
 const billed = id => db.works.filter(w => w.customerId === id).reduce((s, w) => s + bill(w), 0);
 const clientBalance = id => paid(id) - billed(id);
@@ -214,23 +219,13 @@ function cardAvgRate(cardId) { return getCardStats(cardId).avgRate; }
 function cardSpent(cardId) { return getCardStats(cardId).outUsd; }
 
 function getWalletBalances() {
-  const bal = { bKash: 0, Nagad: 0, Bank: 0, Cash: 0, Card: 0 };
-  db.payments.forEach(p => {
-    const m = bal.hasOwnProperty(p.method) ? p.method : 'Cash';
-    bal[m] += num(p.amount) - num(p.fee);
-  });
-  db.expenses.forEach(ex => {
-    const m = bal.hasOwnProperty(ex.method) ? ex.method : 'Cash';
-    bal[m] -= num(ex.amount);
-  });
-  db.cardDeposits.forEach(d => {
-    const m = bal.hasOwnProperty(d.method) ? d.method : 'Bank';
-    bal[m] -= num(d.taka);
-  });
-  db.cashAdjustments.forEach(a => {
-    const m = bal.hasOwnProperty(a.method) ? a.method : 'Cash';
-    bal[m] += a.type === 'out' ? -num(a.amount) : num(a.amount);
-  });
+  const bal = {};
+  (db.wallets || DEFAULT_WALLETS).forEach(w => { bal[w] = 0; });
+  const ensure = k => { const key = k || 'Cash'; if (!Object.prototype.hasOwnProperty.call(bal, key)) bal[key] = 0; return key; };
+  db.payments.forEach(p => { bal[ensure(p.method)] += num(p.amount) - num(p.fee); });
+  db.expenses.forEach(ex => { bal[ensure(ex.method)] -= num(ex.amount); });
+  db.cardDeposits.forEach(d => { bal[ensure(d.method || 'Bank')] -= num(d.taka); });
+  db.cashAdjustments.forEach(a => { bal[ensure(a.method)] += a.type === 'out' ? -num(a.amount) : num(a.amount); });
   return bal;
 }
 
@@ -437,8 +432,8 @@ const translations = {
   bn: {
     navDash: "📊 ড্যাশবোর্ড", navCust: "👥 কাস্টমার প্রোফাইল", navCards: "💳 ডলার ও কার্ড হিসাব",
     navRates: "📈 দৈনিক ডলার রেট", navWorks: "⚡ কাজের হিসাব", navPixel: "🎯 মেটা পিক্সেল ও অ্যাড অ্যাকাউন্ট",
-    navExp: "💸 অফিস ও অন্যান্য খরচ", navPay: "💰 পেমেন্ট ও ক্যাশবুক", navDue: "📑 বকেয়া ও অটোমেশন",
-    navMonthly: "📅 মাসিক বা নির্দিষ্ট হিসাব", navRep: "📂 ব্যাকআপ ও রিপোর্ট", navSet: "⚙ সেটিংস",
+    navExp: "💸 অফিস ও অন্যান্য খরচ", navPay: "💰 পেমেন্ট ও মোবাইল ওয়ালেট", navDue: "📑 বকেয়া ও অটোমেশন",
+    navMonthly: "📅 মাসিক বা নির্দিষ্ট হিসাব", navRep: "📂 রিপোর্ট, কমিশন ও ব্যাকআপ", navSet: "⚙ সেটিংস",
     navLogout: "↪ লগ আউট", navChat: "💬 নোট ও চ্যাট",
     headerSub: "আপনার এজেন্সির বিজ্ঞাপন ও আর্থিক পারফরম্যান্স পরিচালনা করুন",
     loginTitle: "Ads হিসাব ম্যানেজার", loginSub: "আপনার বিজ্ঞাপনের হিসাব ও লাভ-ক্ষতি নিরাপদে পরিচালনা করুন",
@@ -453,8 +448,8 @@ const translations = {
   en: {
     navDash: "📊 Dashboard", navCust: "👥 Customers & Pages", navCards: "💳 Cards & USD",
     navRates: "📈 Daily USD Rates", navWorks: "⚡ Campaigns / Works", navPixel: "🎯 Pixel & Ad Accounts",
-    navExp: "💸 Office Expenses", navPay: "💰 Payments & Cashbook", navDue: "📑 Dues & WhatsApp",
-    navMonthly: "📅 Monthly Report", navRep: "📂 Reports & Backup", navSet: "⚙ Settings",
+    navExp: "💸 Office Expenses", navPay: "💰 Payments & Wallets", navDue: "📑 Dues & WhatsApp",
+    navMonthly: "📅 Monthly Report", navRep: "📂 Reports & Commission", navSet: "⚙ Settings",
     navLogout: "↪ Logout", navChat: "💬 Notes & Chat",
     headerSub: "Manage your agency ad spend, billing, and net profit",
     loginTitle: "Ads Manager Login", loginSub: "Manage your ad accounts and profits securely",
@@ -527,10 +522,36 @@ function fillSelect(id, items, placeholder, display = x => x.name) {
   if (items.some(x => x.id === old)) el.value = old;
 }
 
+function refreshWalletSelects() {
+  const list = db.wallets && db.wallets.length ? db.wallets : DEFAULT_WALLETS;
+  ['pMethod', 'epMethod', 'expMethod', 'eeMethod', 'depositMethod', 'edMethod', 'caMethod'].forEach(id => {
+    const el = $(id); if (!el) return;
+    const old = el.value;
+    const opts = old && !list.includes(old) ? [...list, old] : list;
+    el.innerHTML = opts.map(w => `<option value="${esc(w)}">${esc(w)}</option>`).join('');
+    if (old && opts.includes(old)) el.value = old;
+    else if (id.includes('deposit') && list.includes('Bank')) el.value = 'Bank';
+    else if ((id.includes('exp') || id.includes('ca')) && list.includes('Cash')) el.value = 'Cash';
+  });
+}
+
+function fillStaffSelect(id) {
+  const el = $(id); if (!el) return;
+  const old = el.value;
+  const accounts = readLocalAccounts();
+  const saName = (activeAccount?.id === 'legacy-super-admin' ? readProfile().name : '') || 'Admin / Owner';
+  const names = [saName, ...accounts.map(a => a.name)];
+  const unique = [...new Set(names.filter(Boolean))];
+  if (old && !unique.includes(old)) unique.push(old);
+  el.innerHTML = `<option value="">নির্বাচন করুন (ঐচ্ছিক)</option>` + unique.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if (old) el.value = old;
+}
+
 function refresh() {
   fillSelect('wCard', db.cards, 'কার্ড নির্বাচন');
   fillSelect('ewCard', db.cards, 'কার্ড নির্বাচন');
   fillSelect('aaCard', db.cards, 'কার্ড নির্বাচন');
+  fillSelect('eaaCard', db.cards, 'কার্ড নির্বাচন');
   fillSelect('depositCard', db.cards, db.cards.length ? '' : 'প্রথমে কার্ড যোগ করুন');
   fillSelect('trFromCard', db.cards, 'কার্ড নির্বাচন');
   fillSelect('trToCard', db.cards, 'কার্ড নির্বাচন');
@@ -541,6 +562,9 @@ function refresh() {
   fillSelect('pCustomer', db.customers, 'কাস্টমার নির্বাচন');
   fillSelect('epCustomer', db.customers, 'কাস্টমার নির্বাচন');
   fillSelect('workCustomerFilter', db.customers, 'সব কাস্টমার');
+  refreshWalletSelects();
+  fillStaffSelect('wStaff');
+  fillStaffSelect('ewStaff');
   updatePages();
 }
 
@@ -587,18 +611,13 @@ function updateWorkPreview() {
   const actualDol = num($('wActualDollar')?.value);
   const rate = num($('wRate')?.value) || rateFor(date);
   const sFee = num($('wServiceFee')?.value), sType = $('wServiceFeeType')?.value || 'fixed';
-  const actRate = num($('wActualRate')?.value);
-  const feePct = num($('wFeePct')?.value);
-  const other = num($('wOther')?.value);
+  const actRate = num($('wActualRate')?.value), feePct = num($('wFeePct')?.value), other = num($('wOther')?.value);
   const cardId = $('wCard')?.value || '';
 
   const baseB = actualDol * rate;
   const svc = sFee ? (sType === 'pct' ? baseB * (sFee / 100) : sFee) : 0;
   const b = baseB + svc;
-  const base = actualDol * actRate;
-  const fee = base * (feePct / 100);
-  const act = base + fee;
-  const pr = b - act - other;
+  const base = actualDol * actRate, fee = base * (feePct / 100), act = base + fee, pr = b - act - other;
 
   let warnHtml = '';
   if (!isStaff() && actualDol > 0 && actRate > 0 && pr < 0) warnHtml += ` <span class="badge-danger">⚠️ লস হচ্ছে!</span>`;
@@ -617,8 +636,7 @@ function updateEditWorkPreview() {
   const actualDol = num($('ewActualDollar')?.value), rate = num($('ewRate')?.value);
   const sFee = num($('ewServiceFee')?.value), sType = $('ewServiceFeeType')?.value || 'fixed';
   const actRate = num($('ewActualRate')?.value), feePct = num($('ewFeePct')?.value), other = num($('ewOther')?.value);
-  const baseB = actualDol * rate;
-  const svc = sFee ? (sType === 'pct' ? baseB * (sFee / 100) : sFee) : 0;
+  const baseB = actualDol * rate, svc = sFee ? (sType === 'pct' ? baseB * (sFee / 100) : sFee) : 0;
   const b = baseB + svc, base = actualDol * actRate, fee = base * (feePct / 100), act = base + fee, pr = b - act - other;
   if ($('ewPreview')) {
     if (isStaff()) $('ewPreview').textContent = `মোট বিল: ${money(b)}`;
@@ -656,32 +674,19 @@ if ($('loginHelpBtn')) $('loginHelpBtn').onclick = () => {
 if ($('loginHelpForm')) $('loginHelpForm').onsubmit = e => {
   e.preventDefault();
   const arr = readHelpRequests();
-  arr.unshift({
-    id: uid(), time: new Date().toLocaleString('bn-BD'),
-    target: $('lhTarget').value, name: $('lhName').value.trim(),
-    contact: $('lhContact').value.trim(), topic: $('lhTopic').value,
-    message: $('lhMessage').value.trim(), status: 'open'
-  });
+  arr.unshift({ id: uid(), time: new Date().toLocaleString('bn-BD'), target: $('lhTarget').value, name: $('lhName').value.trim(), contact: $('lhContact').value.trim(), topic: $('lhTopic').value, message: $('lhMessage').value.trim(), status: 'open' });
   if (arr.length > 100) arr.pop();
-  writeHelpRequests(arr);
-  closeModal('loginHelpModal');
+  writeHelpRequests(arr); closeModal('loginHelpModal');
   toast('আপনার বার্তাটি Admin / Super Admin-এর ইনবক্সে পাঠানো হয়েছে!');
 };
-
 window.resolveHelpReq = function(id) {
   const arr = readHelpRequests(), item = arr.find(x => x.id === id); if (!item) return;
   item.status = item.status === 'resolved' ? 'open' : 'resolved';
   writeHelpRequests(arr); renderAdminPanel(); updateNotifications();
   toast(item.status === 'resolved' ? 'সমাধান হিসেবে চিহ্নিত হয়েছে!' : 'পুনরায় Open করা হয়েছে');
 };
-window.deleteHelpReq = function(id) {
-  writeHelpRequests(readHelpRequests().filter(x => x.id !== id));
-  renderAdminPanel(); updateNotifications(); toast('মেসেজ মুছে ফেলা হয়েছে', 'warn');
-};
-window.clearAllHelpRequests = function() {
-  if (!confirm('সব হেল্প মেসেজ মুছে ফেলতে চান?')) return;
-  writeHelpRequests([]); renderAdminPanel(); updateNotifications(); toast('হেল্প ইনবক্স পরিষ্কার হয়েছে', 'warn');
-};
+window.deleteHelpReq = function(id) { writeHelpRequests(readHelpRequests().filter(x => x.id !== id)); renderAdminPanel(); updateNotifications(); toast('মেসেজ মুছে ফেলা হয়েছে', 'warn'); };
+window.clearAllHelpRequests = function() { if (!confirm('সব হেল্প মেসেজ মুছে ফেলতে চান?')) return; writeHelpRequests([]); renderAdminPanel(); updateNotifications(); toast('হেল্প ইনবক্স পরিষ্কার হয়েছে', 'warn'); };
 
 // Auth System
 function readLocalAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTSKEY) || '[]'); } catch (e) { return []; } }
@@ -700,8 +705,7 @@ window.performLocalLogout = function() {
   activeAccount = null; realSuperAdmin = null;
   if ($('impersonateBanner')) $('impersonateBanner').style.display = 'none';
   document.body.classList.remove('role-staff', 'role-superadmin', 'no-perm-del', 'no-perm-edit', 'no-perm-pay', 'no-perm-exp');
-  KEY = MASTER_DB_KEY;
-  loadDb();
+  KEY = MASTER_DB_KEY; loadDb();
   document.querySelectorAll('.side-menu button').forEach(b => b.classList.toggle('active', b.dataset.tab === 'dash'));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === 'dash'));
   if ($('authOverlay')) $('authOverlay').style.display = 'flex';
@@ -721,10 +725,7 @@ window.login = function() {
   const accounts = readLocalAccounts();
   let accIdx = accounts.findIndex(a => [a.username, a.email, a.phone].some(v => String(v || '').trim().toLowerCase() === identity) && checkPass(pass, a.password));
   let account = accIdx !== -1 ? accounts[accIdx] : null;
-  if (account && !String(account.password).startsWith('h1_')) {
-    accounts[accIdx].password = hashPass(pass);
-    localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-  }
+  if (account && !String(account.password).startsWith('h1_')) { accounts[accIdx].password = hashPass(pass); localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
 
   const superAdminPass = localStorage.getItem(PASSKEY) || '123456789';
   if (!account && identity === 'admin' && checkPass(pass, superAdminPass)) {
@@ -736,14 +737,11 @@ window.login = function() {
 
   const nowStr = new Date().toLocaleString('bn-BD');
   if (account.id === 'legacy-super-admin') {
-    const meta = readSuperAdminMeta();
-    meta.lastLogin = nowStr; meta.loginCount = num(meta.loginCount) + 1;
+    const meta = readSuperAdminMeta(); meta.lastLogin = nowStr; meta.loginCount = num(meta.loginCount) + 1;
     localStorage.setItem(SUPERADMIN_META_KEY, JSON.stringify(meta));
   } else if (accIdx !== -1) {
-    accounts[accIdx].lastLogin = nowStr;
-    accounts[accIdx].loginCount = num(accounts[accIdx].loginCount) + 1;
-    localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-    account = accounts[accIdx];
+    accounts[accIdx].lastLogin = nowStr; accounts[accIdx].loginCount = num(accounts[accIdx].loginCount) + 1;
+    localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); account = accounts[accIdx];
   }
 
   if ($('rememberLogin')?.checked) localStorage.setItem(REMEMBER_LOGIN_KEY, encodeRemember({ identity, pass }));
@@ -751,9 +749,7 @@ window.login = function() {
 
   realSuperAdmin = null;
   if ($('impersonateBanner')) $('impersonateBanner').style.display = 'none';
-  activeAccount = account;
-  applyPermissionClasses();
-  activateAccountData(account);
+  activeAccount = account; applyPermissionClasses(); activateAccountData(account);
   logActivity('লগইন করেছেন');
   if ($('authOverlay')) $('authOverlay').style.display = 'none';
 
@@ -763,58 +759,36 @@ window.login = function() {
   updateHeaderAndProfile();
   if ($('wRate') && !num($('wRate').value)) $('wRate').value = rateFor(today()) || '';
   if ($('wFeePct')) $('wFeePct').value = num(db.agency?.defaultFeePct) || 0;
-  goToSection('dash');
-  updateWorkPreview();
+  goToSection('dash'); updateWorkPreview();
   if (typeof refreshOnlineChat === 'function') refreshOnlineChat();
 
   const cfg = readCloudSync();
   if (!cfg.url) setSyncUi('', 'Local');
   else if (localStorage.getItem(LOCAL_DIRTY_KEY) === '1') setSyncUi('err', 'Pending Sync');
   else setSyncUi('ok', 'Synced');
-
   toast(`স্বাগতম, ${readProfile().name || account.name}!`);
 };
 
-['loginUser','loginPass'].forEach(id => {
-  if ($(id)) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') window.login(); });
-});
+['loginUser','loginPass'].forEach(id => { if ($(id)) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') window.login(); }); });
 if ($('loginBtn')) $('loginBtn').onclick = window.login;
 
-if ($('showRegisterBtn')) $('showRegisterBtn').onclick = () => {
-  $('loginFormContainer').style.display = 'none';
-  $('registerPanel').style.display = 'block';
-  if ($('authMsg')) $('authMsg').textContent = '';
-};
-if ($('backToLoginBtn')) $('backToLoginBtn').onclick = () => {
-  $('registerPanel').style.display = 'none';
-  $('loginFormContainer').style.display = 'block';
-  if ($('authMsg')) $('authMsg').textContent = '';
-};
+if ($('showRegisterBtn')) $('showRegisterBtn').onclick = () => { $('loginFormContainer').style.display = 'none'; $('registerPanel').style.display = 'block'; if ($('authMsg')) $('authMsg').textContent = ''; };
+if ($('backToLoginBtn')) $('backToLoginBtn').onclick = () => { $('registerPanel').style.display = 'none'; $('loginFormContainer').style.display = 'block'; if ($('authMsg')) $('authMsg').textContent = ''; };
 
 if ($('registerBtn')) $('registerBtn').onclick = () => {
-  const name = $('regName')?.value.trim();
-  const username = ($('regUsername')?.value || '').trim().toLowerCase();
-  const email = ($('regEmail')?.value || '').trim().toLowerCase();
-  const phone = ($('regPhone')?.value || '').trim();
-  const pass = $('regPass')?.value || '';
-  const pass2 = $('regPass2')?.value || '';
-
+  const name = $('regName')?.value.trim(), username = ($('regUsername')?.value || '').trim().toLowerCase(), email = ($('regEmail')?.value || '').trim().toLowerCase(), phone = ($('regPhone')?.value || '').trim(), pass = $('regPass')?.value || '', pass2 = $('regPass2')?.value || '';
   if (!name || !username || !email || !phone || !pass) { $('authMsg').textContent = 'সবগুলো ঘর পূরণ করুন।'; return; }
   if (username === 'admin') { $('authMsg').textContent = 'admin ইউজারনেম ব্যবহার করা যাবে না।'; return; }
   if (pass.length < 6) { $('authMsg').textContent = 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।'; return; }
   if (pass !== pass2) { $('authMsg').textContent = 'পাসওয়ার্ড মিলছে না।'; return; }
 
   const accounts = readLocalAccounts();
-  if (accounts.some(a => a.username === username || a.email === email)) {
-    $('authMsg').textContent = 'এই ইউজারনেম বা ইমেইল দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে।';
-    return;
-  }
+  if (accounts.some(a => a.username === username || a.email === email)) { $('authMsg').textContent = 'এই ইউজারনেম বা ইমেইল দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে।'; return; }
 
   const next = Number(localStorage.getItem(NEXTUSERIDKEY) || 2);
   const account = { id: uid(), updatedAt: Date.now(), userNumber: next, name, username, email, phone, password: hashPass(pass), role: 'user', status: 'active', lastLogin: new Date().toLocaleString('bn-BD'), loginCount: 1 };
   accounts.push(account);
-  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-  localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
+  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
 
   activeAccount = account; realSuperAdmin = null;
   applyPermissionClasses(); activateAccountData(account);
@@ -828,48 +802,30 @@ if ($('registerBtn')) $('registerBtn').onclick = () => {
   toast('নতুন অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!');
 };
 
-// Recovery Modal
-if ($('forgotBtn')) $('forgotBtn').onclick = () => {
-  $('recoveryMode').value = 'password'; $('recoveryTitle').textContent = 'পাসওয়ার্ড রিসেট করুন';
-  $('recNewPassWrap').style.display = 'block'; $('recNewPass').required = true;
-  $('recoveryForm').reset(); $('recoveryModal').style.display = 'flex';
-};
-if ($('forgotUserBtn')) $('forgotUserBtn').onclick = () => {
-  $('recoveryMode').value = 'username'; $('recoveryTitle').textContent = 'ইউজারনেম খুঁজুন';
-  $('recNewPassWrap').style.display = 'none'; $('recNewPass').required = false;
-  $('recoveryForm').reset(); $('recoveryModal').style.display = 'flex';
-};
+// Recovery
+if ($('forgotBtn')) $('forgotBtn').onclick = () => { $('recoveryMode').value = 'password'; $('recoveryTitle').textContent = 'পাসওয়ার্ড রিসেট করুন'; $('recNewPassWrap').style.display = 'block'; $('recNewPass').required = true; $('recoveryForm').reset(); $('recoveryModal').style.display = 'flex'; };
+if ($('forgotUserBtn')) $('forgotUserBtn').onclick = () => { $('recoveryMode').value = 'username'; $('recoveryTitle').textContent = 'ইউজারনেম খুঁজুন'; $('recNewPassWrap').style.display = 'none'; $('recNewPass').required = false; $('recoveryForm').reset(); $('recoveryModal').style.display = 'flex'; };
 if ($('recoveryForm')) $('recoveryForm').onsubmit = e => {
   e.preventDefault();
   const mode = $('recoveryMode').value, email = $('recEmail').value.trim().toLowerCase(), phone = $('recPhone').value.trim();
-  const accounts = readLocalAccounts();
-  const idx = accounts.findIndex(a => String(a.email || '').trim().toLowerCase() === email && String(a.phone || '').trim() === phone);
-
+  const accounts = readLocalAccounts(), idx = accounts.findIndex(a => String(a.email || '').trim().toLowerCase() === email && String(a.phone || '').trim() === phone);
   if (idx === -1) {
     const saProf = (() => { try { return JSON.parse(localStorage.getItem('ads_hisab_user_profile_v72_legacy-super-admin') || '{}'); } catch (err) { return {}; } })();
-    const saEmail = String(saProf.email || 'admin@example.com').trim().toLowerCase();
-    const saPhone = String(saProf.phone || '01700000000').trim();
-    if (email === saEmail && phone === saPhone) {
+    if (email === String(saProf.email || 'admin@example.com').trim().toLowerCase() && phone === String(saProf.phone || '01700000000').trim()) {
       if (mode === 'username') { toast('আপনার ইউজারনেম: admin', 'success'); closeModal('recoveryModal'); }
       else {
-        const np = $('recNewPass').value;
-        if (np.length < 6) { toast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন', 'error'); return; }
-        localStorage.setItem(PASSKEY, hashPass(np));
-        toast('সুপার অ্যাডমিন পাসওয়ার্ড রিসেট হয়েছে! এখন লগইন করুন।'); closeModal('recoveryModal');
+        const np = $('recNewPass').value; if (np.length < 6) return toast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন', 'error');
+        localStorage.setItem(PASSKEY, hashPass(np)); toast('সুপার অ্যাডমিন পাসওয়ার্ড রিসেট হয়েছে!'); closeModal('recoveryModal');
       }
       return;
     }
-    toast('ইমেইল ও মোবাইল নম্বর মিলছে না!', 'error');
-    return;
+    return toast('ইমেইল ও মোবাইল নম্বর মিলছে না!', 'error');
   }
-
   if (mode === 'username') { toast(`আপনার ইউজারনেম: ${accounts[idx].username}`, 'success'); closeModal('recoveryModal'); }
   else {
-    const np = $('recNewPass').value;
-    if (np.length < 6) { toast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন', 'error'); return; }
+    const np = $('recNewPass').value; if (np.length < 6) return toast('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন', 'error');
     accounts[idx].password = hashPass(np); accounts[idx].updatedAt = Date.now();
-    localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-    toast('পাসওয়ার্ড সফলভাবে রিসেট হয়েছে! এখন লগইন করুন।'); closeModal('recoveryModal');
+    localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); toast('পাসওয়ার্ড সফলভাবে রিসেট হয়েছে!'); closeModal('recoveryModal');
   }
 };
 
@@ -878,8 +834,7 @@ function readProfile() { try { return JSON.parse(localStorage.getItem(PROFILEKEY
 
 function applyAgencyBranding() {
   const ag = db.agency || {};
-  const title = ag.name || 'Ads হিসাব ম্যানেজার';
-  const tagline = ag.tagline || 'Smart · Secure · Pro v73';
+  const title = ag.name || 'Ads হিসাব ম্যানেজার', tagline = ag.tagline || 'Smart · Secure · Pro v74';
   if ($('sideBrandTitle')) $('sideBrandTitle').textContent = title;
   if ($('sideBrandSub')) $('sideBrandSub').textContent = tagline;
   if ($('agName')) $('agName').value = title;
@@ -887,10 +842,12 @@ function applyAgencyBranding() {
   if ($('agPhone')) $('agPhone').value = ag.phone || '';
   if ($('agDefaultRate')) $('agDefaultRate').value = ag.defaultRate || 125;
   if ($('agDefaultFee')) $('agDefaultFee').value = ag.defaultFeePct || 0;
+  if ($('agMonthlyGoal')) $('agMonthlyGoal').value = num(ag.monthlyGoal) || 100000;
   if ($('agLogoUrl')) $('agLogoUrl').value = ag.logoUrl || '';
   if ($('agQrUrl')) $('agQrUrl').value = ag.qrUrl || '';
   if ($('agSignText')) $('agSignText').value = ag.signText || '';
   if ($('agPayInfo')) $('agPayInfo').value = ag.payInfo || '';
+  if ($('agMetaToken')) $('agMetaToken').value = ag.metaToken || '';
   if ($('agWaTemplate')) $('agWaTemplate').value = ag.waTemplate || DEFAULT_WA_TEMPLATE;
 }
 
@@ -898,14 +855,16 @@ if ($('agencyForm')) $('agencyForm').onsubmit = e => {
   e.preventDefault();
   db.agency = {
     name: $('agName').value.trim() || 'Ads হিসাব ম্যানেজার',
-    tagline: $('agTagline').value.trim() || 'Smart · Secure · Pro v73',
+    tagline: $('agTagline').value.trim() || 'Smart · Secure · Pro v74',
     phone: $('agPhone').value.trim(),
     defaultRate: num($('agDefaultRate').value) || 125,
     defaultFeePct: num($('agDefaultFee').value) || 0,
+    monthlyGoal: num($('agMonthlyGoal')?.value) || 0,
     logoUrl: $('agLogoUrl')?.value.trim() || '',
     qrUrl: $('agQrUrl')?.value.trim() || '',
     signText: $('agSignText')?.value.trim() || '',
     payInfo: $('agPayInfo')?.value.trim() || '',
+    metaToken: $('agMetaToken')?.value.trim() || '',
     waTemplate: $('agWaTemplate')?.value.trim() || DEFAULT_WA_TEMPLATE
   };
   save(); applyAgencyBranding(); logActivity('এজেন্সি ব্র্যান্ডিং আপডেট হয়েছে');
@@ -915,8 +874,7 @@ if ($('agencyForm')) $('agencyForm').onsubmit = e => {
 };
 
 function updateHeaderAndProfile() {
-  const p = readProfile();
-  const currentName = p.name || activeAccount?.name || 'User';
+  const p = readProfile(), currentName = p.name || activeAccount?.name || 'User';
   const roleMap = { super_admin: 'Super Admin', admin: 'Admin', staff: 'Staff', user: 'User' };
   const currentRole = (activeAccount?.id === 'legacy-super-admin') ? 'Super Admin' : (roleMap[activeAccount?.role] || 'User');
 
@@ -928,32 +886,18 @@ function updateHeaderAndProfile() {
 
   if ($('profileDisplayName')) $('profileDisplayName').textContent = currentName;
   if ($('profileUserId')) $('profileUserId').textContent = 'ID: AS-' + String(activeAccount?.userNumber || 1).padStart(5, '0');
-  if ($('profileRoleBadge')) {
-    $('profileRoleBadge').textContent = currentRole;
-    $('profileRoleBadge').className = isStaff() ? 'badge-admin' : 'badge-success';
-  }
+  if ($('profileRoleBadge')) { $('profileRoleBadge').textContent = currentRole; $('profileRoleBadge').className = isStaff() ? 'badge-admin' : 'badge-success'; }
   if ($('profileName')) $('profileName').value = currentName;
   if ($('profileEmail')) $('profileEmail').value = p.email || activeAccount?.email || '';
   if ($('profilePhone')) $('profilePhone').value = p.phone || activeAccount?.phone || '';
 
   pendingProfilePicData = p.pic || '';
   if ($('profilePicInput')) {
-    if (pendingProfilePicData.startsWith('data:image/')) {
-      $('profilePicInput').value = '';
-      $('profilePicInput').placeholder = 'আপলোড করা ছবি সেভ আছে (নতুন লিংক দিলে বদলাবে)';
-    } else {
-      $('profilePicInput').value = pendingProfilePicData;
-      $('profilePicInput').placeholder = 'https://... (ঐচ্ছিক)';
-    }
+    if (pendingProfilePicData.startsWith('data:image/')) { $('profilePicInput').value = ''; $('profilePicInput').placeholder = 'আপলোড করা ছবি সেভ আছে'; }
+    else { $('profilePicInput').value = pendingProfilePicData; $('profilePicInput').placeholder = 'https://... (ঐচ্ছিক)'; }
   }
-
-  const fallback = defaultAvatarUrl(currentName);
-  const picUrl = pendingProfilePicData || fallback;
-  [$('profilePreview'), $('headerProfilePic')].forEach(img => {
-    if (!img) return;
-    img.onerror = () => { img.onerror = null; img.src = fallback; };
-    img.src = picUrl;
-  });
+  const fallback = defaultAvatarUrl(currentName), picUrl = pendingProfilePicData || fallback;
+  [$('profilePreview'), $('headerProfilePic')].forEach(img => { if (!img) return; img.onerror = () => { img.onerror = null; img.src = fallback; }; img.src = picUrl; });
 
   applyAgencyBranding();
   if (!isStaff()) renderAdminPanel();
@@ -963,25 +907,18 @@ if ($('profilePicFile')) $('profilePicFile').onchange = async e => {
   const file = e.target.files?.[0]; if (!file) return;
   try {
     const compressed = await compressImageFile(file, 240, 0.82);
-    pendingProfilePicData = compressed;
-    if ($('profilePreview')) $('profilePreview').src = compressed;
+    pendingProfilePicData = compressed; if ($('profilePreview')) $('profilePreview').src = compressed;
     if ($('profilePicInput')) $('profilePicInput').value = '';
-    toast('ছবি প্রস্তুত! সেভ করতে "প্রোফাইল আপডেট করুন" বাটনে ক্লিক করুন।');
+    toast('ছবি প্রস্তুত! "প্রোফাইল আপডেট করুন" বাটনে ক্লিক করুন।');
   } catch (err) { toast('ছবি প্রসেস করতে সমস্যা হয়েছে!', 'error'); }
 };
-
 if ($('removeProfilePicBtn')) $('removeProfilePicBtn').onclick = () => {
-  pendingProfilePicData = '';
-  if ($('profilePicInput')) $('profilePicInput').value = '';
-  if ($('profilePicFile')) $('profilePicFile').value = '';
-  const p = readProfile(); p.pic = '';
-  localStorage.setItem(PROFILEKEY, JSON.stringify(p));
-  updateHeaderAndProfile(); toast('প্রোফাইল ছবি সরানো হয়েছে', 'warn');
+  pendingProfilePicData = ''; if ($('profilePicInput')) $('profilePicInput').value = ''; if ($('profilePicFile')) $('profilePicFile').value = '';
+  const p = readProfile(); p.pic = ''; localStorage.setItem(PROFILEKEY, JSON.stringify(p)); updateHeaderAndProfile(); toast('প্রোফাইল ছবি সরানো হয়েছে', 'warn');
 };
-
 function saveProfileData(name, email, phone, pic) {
   try { localStorage.setItem(PROFILEKEY, JSON.stringify({ name, email, phone, pic })); }
-  catch (e) { toast('ছবিটি অনেক বড় হওয়ায় সেভ করা যায়নি!', 'error'); return; }
+  catch (e) { return toast('ছবিটি অনেক বড় হওয়ায় সেভ করা যায়নি!', 'error'); }
   if (activeAccount) {
     activeAccount.name = name; activeAccount.email = email; activeAccount.phone = phone;
     if (activeAccount.id !== 'legacy-super-admin') {
@@ -992,32 +929,25 @@ function saveProfileData(name, email, phone, pic) {
   if ($('profilePicFile')) $('profilePicFile').value = '';
   logActivity(`প্রোফাইল আপডেট হয়েছে: ${name}`); updateHeaderAndProfile(); toast('প্রোফাইল সফলভাবে আপডেট হয়েছে!');
 }
-
-if ($('profileForm')) $('profileForm').onsubmit = e => {
-  e.preventDefault();
-  saveProfileData($('profileName').value.trim(), $('profileEmail').value.trim(), $('profilePhone').value.trim(), $('profilePicInput').value.trim() || pendingProfilePicData || '');
-};
+if ($('profileForm')) $('profileForm').onsubmit = e => { e.preventDefault(); saveProfileData($('profileName').value.trim(), $('profileEmail').value.trim(), $('profilePhone').value.trim(), $('profilePicInput').value.trim() || pendingProfilePicData || ''); };
 
 if ($('settingsPasswordForm')) $('settingsPasswordForm').onsubmit = e => {
   e.preventDefault();
   const oldPass = $('settingsOldPass').value, newPass = $('settingsNewPass').value, newPass2 = $('settingsNewPass2').value, msgEl = $('settingsPasswordMsg');
   if (newPass !== newPass2) { msgEl.textContent = 'নতুন পাসওয়ার্ড দুটি মিলছে না!'; return; }
   if (newPass.length < 6) { msgEl.textContent = 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে!'; return; }
-
   if (activeAccount && activeAccount.id !== 'legacy-super-admin') {
     if (!checkPass(oldPass, activeAccount.password)) { msgEl.textContent = 'বর্তমান পাসওয়ার্ড সঠিক নয়!'; return; }
     activeAccount.password = hashPass(newPass); activeAccount.updatedAt = Date.now();
     const accounts = readLocalAccounts(), idx = accounts.findIndex(a => a.id === activeAccount.id);
     if (idx !== -1) { accounts[idx] = activeAccount; localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
   } else {
-    const currentSuperPass = localStorage.getItem(PASSKEY) || '123456789';
-    if (!checkPass(oldPass, currentSuperPass)) { msgEl.textContent = 'বর্তমান পাসওয়ার্ড সঠিক নয়!'; return; }
+    if (!checkPass(oldPass, localStorage.getItem(PASSKEY) || '123456789')) { msgEl.textContent = 'বর্তমান পাসওয়ার্ড সঠিক নয়!'; return; }
     localStorage.setItem(PASSKEY, hashPass(newPass));
   }
   const rem = decodeRemember(localStorage.getItem(REMEMBER_LOGIN_KEY));
   if (rem) localStorage.setItem(REMEMBER_LOGIN_KEY, encodeRemember({ ...rem, pass: newPass }));
-  msgEl.textContent = 'পাসওয়ার্ড সফলভাবে আপডেট হয়েছে!';
-  logActivity('পাসওয়ার্ড পরিবর্তন করা হয়েছে'); e.target.reset(); toast('পাসওয়ার্ড আপডেট হয়েছে!');
+  msgEl.textContent = 'পাসওয়ার্ড সফলভাবে আপডেট হয়েছে!'; logActivity('পাসওয়ার্ড পরিবর্তন করা হয়েছে'); e.target.reset(); toast('পাসওয়ার্ড আপডেট হয়েছে!');
 };
 
 if ($('usernameForm')) $('usernameForm').onsubmit = e => {
@@ -1033,18 +963,15 @@ if ($('usernameForm')) $('usernameForm').onsubmit = e => {
     if (idx !== -1) { accounts[idx] = activeAccount; localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); }
     const rem = decodeRemember(localStorage.getItem(REMEMBER_LOGIN_KEY));
     if (rem) localStorage.setItem(REMEMBER_LOGIN_KEY, encodeRemember({ ...rem, identity: newU }));
-    msgEl.textContent = 'ইউজারনেম সফলভাবে আপডেট হয়েছে!';
-    logActivity(`ইউজারনেম পরিবর্তন হয়েছে: ${newU}`); toast('ইউজারনেম আপডেট হয়েছে!');
+    msgEl.textContent = 'ইউজারনেম সফলভাবে আপডেট হয়েছে!'; logActivity(`ইউজারনেম পরিবর্তন: ${newU}`); toast('ইউজারনেম আপডেট হয়েছে!');
   } else msgEl.textContent = 'সুপার অ্যাডমিন ইউজারনেম (admin) পরিবর্তনযোগ্য নয়।';
   e.target.reset();
 };
 
-// Pixel Hub & Ad Account Health Tracker
+// Pixel Hub & Ad Account Health + Meta Marketing API Sync
 function generatePixelCode() {
-  const pid = $('genPixelId')?.value.trim() || '1234567890';
-  const event = $('genPixelEvent')?.value || 'Purchase', val = num($('genPixelVal')?.value);
-  const eventSnippet = ['Purchase','AddToCart','ViewContent','InitiateCheckout'].includes(event)
-    ? `fbq('track', '${event}', {value: ${val}, currency: 'BDT'});` : `fbq('track', '${event}');`;
+  const pid = $('genPixelId')?.value.trim() || '1234567890', event = $('genPixelEvent')?.value || 'Purchase', val = num($('genPixelVal')?.value);
+  const eventSnippet = ['Purchase','AddToCart','ViewContent','InitiateCheckout'].includes(event) ? `fbq('track', '${event}', {value: ${val}, currency: 'BDT'});` : `fbq('track', '${event}');`;
   if ($('pixelCodeOutput')) $('pixelCodeOutput').textContent = `<!-- Meta Pixel Code -->
 <script>
   !function(f,b,e,v,n,t,s)
@@ -1060,82 +987,114 @@ function generatePixelCode() {
   ${eventSnippet}
 </` + `script>`;
 }
-['generatePixelBtn','genPixelId','genPixelEvent','genPixelVal'].forEach(id => {
-  if ($(id)) $(id)[id === 'generatePixelBtn' ? 'onclick' : 'oninput'] = generatePixelCode;
-});
+['generatePixelBtn','genPixelId','genPixelEvent','genPixelVal'].forEach(id => { if ($(id)) $(id)[id === 'generatePixelBtn' ? 'onclick' : 'oninput'] = generatePixelCode; });
 if ($('genPixelEvent')) $('genPixelEvent').onchange = generatePixelCode;
 if ($('simulateCapiBtn')) $('simulateCapiBtn').onclick = () => {
   const pid = $('genPixelId').value.trim() || '1234567890', event = $('genPixelEvent').value, val = num($('genPixelVal').value);
-  const capiPayload = {
-    data: [{ event_name: event, event_time: Math.floor(Date.now() / 1000), action_source: "website",
-      user_data: { em: ["f660ab912ec121d1b1e928a0bb4bc61b15f5ad44d5efdc4e1c92a25e99b8e44a"], ph: ["254c3d6360b0e047d3e63a8412e62444655513c1f10bc7537e28b86e00b8e99a"] },
-      custom_data: { currency: "BDT", value: val } }],
-    test_event_code: "TEST1234"
-  };
+  const capiPayload = { data: [{ event_name: event, event_time: Math.floor(Date.now() / 1000), action_source: "website", user_data: { em: ["f660ab912ec121d1b1e928a0bb4bc61b15f5ad44d5efdc4e1c92a25e99b8e44a"], ph: ["254c3d6360b0e047d3e63a8412e62444655513c1f10bc7537e28b86e00b8e99a"] }, custom_data: { currency: "BDT", value: val } }], test_event_code: "TEST1234" };
   $('pixelCodeOutput').textContent = `// Meta Conversions API (CAPI) JSON Payload\n// POST https://graph.facebook.com/v20.0/${pid}/events\n\n` + JSON.stringify(capiPayload, null, 2);
 };
 if ($('copyPixelBtn')) $('copyPixelBtn').onclick = () => copyText($('pixelCodeOutput').textContent, 'পিক্সেল কোড');
 
 if ($('adAccountForm')) $('adAccountForm').onsubmit = e => {
   e.preventDefault();
-  db.adAccounts.push({
-    id: uid(), updatedAt: Date.now(),
-    name: $('aaName').value.trim(), adId: $('aaId').value.trim(), bm: $('aaBm').value.trim(),
-    cardId: $('aaCard')?.value || '', threshold: num($('aaThreshold').value),
-    unpaid: num($('aaUnpaid').value), status: $('aaStatus').value
-  });
+  db.adAccounts.push({ id: uid(), updatedAt: Date.now(), name: $('aaName').value.trim(), adId: $('aaId').value.trim(), bm: $('aaBm').value.trim(), cardId: $('aaCard')?.value || '', threshold: num($('aaThreshold').value), unpaid: num($('aaUnpaid').value), status: $('aaStatus').value });
   save(); logActivity(`Ad Account যুক্ত: ${$('aaName').value.trim()}`); e.target.reset(); toast('Ad Account সেভ হয়েছে!');
+};
+window.openEditAdAccountModal = function(id) {
+  const a = db.adAccounts.find(x => x.id === id); if (!a) return;
+  refresh();
+  $('eaaId').value = a.id; $('eaaName').value = a.name; $('eaaAdId').value = a.adId || '';
+  $('eaaBm').value = a.bm || ''; if ($('eaaCard')) $('eaaCard').value = a.cardId || '';
+  $('eaaThreshold').value = num(a.threshold); $('eaaUnpaid').value = num(a.unpaid); $('eaaStatus').value = a.status || 'Active';
+  $('editAdAccountModal').style.display = 'flex';
+};
+if ($('editAdAccountForm')) $('editAdAccountForm').onsubmit = e => {
+  e.preventDefault();
+  const a = db.adAccounts.find(x => x.id === $('eaaId').value); if (!a) return;
+  a.name = $('eaaName').value.trim(); a.adId = $('eaaAdId').value.trim(); a.bm = $('eaaBm').value.trim();
+  if (!isStaff()) a.cardId = $('eaaCard')?.value || '';
+  a.threshold = num($('eaaThreshold').value); a.unpaid = num($('eaaUnpaid').value); a.status = $('eaaStatus').value;
+  a.updatedAt = Date.now(); save(); closeModal('editAdAccountModal'); toast('Ad Account আপডেট হয়েছে!');
 };
 window.cycleAdAccountStatus = function(id) {
   const a = db.adAccounts.find(x => x.id === id); if (!a) return;
   const order = ['Active', 'Payment Hold', 'Restricted', 'Disabled'];
-  a.status = order[(order.indexOf(a.status) + 1) % order.length];
-  a.updatedAt = Date.now();
+  a.status = order[(order.indexOf(a.status) + 1) % order.length]; a.updatedAt = Date.now();
   save(); toast(`স্ট্যাটাস আপডেট: ${a.status}`);
 };
 window.deleteAdAccount = function(id) {
   if (!hasPerm('canDelete')) return toast('অনুমতি নেই!', 'error');
   const a = db.adAccounts.find(x => x.id === id); if (!a || !confirm('অ্যাড অ্যাকাউন্টটি মুছে ফেলবেন?')) return;
   moveToTrash('adAccount', `Ad Account: ${a.name}`, a); markDeleted(id);
-  db.adAccounts = db.adAccounts.filter(x => x.id !== id);
-  save(); toast('রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  db.adAccounts = db.adAccounts.filter(x => x.id !== id); save(); toast('রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// Customers & Pages
+window.syncMetaAdAccounts = async function() {
+  const token = db.agency?.metaToken;
+  if (!token) { goToSection('settings'); return toast('সেটিংস → এজেন্সি ও API ট্যাবে গিয়ে Meta Access Token সেভ করুন!', 'warn'); }
+  const targets = db.adAccounts.filter(a => a.adId && a.adId.startsWith('act_'));
+  if (!targets.length) return toast('act_ দিয়ে শুরু হওয়া কোনো Ad Account ID পাওয়া যায়নি!', 'warn');
+  toast('Meta API থেকে লাইভ ডাটা আনা হচ্ছে...');
+  let updated = 0;
+  for (const a of targets) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(a.adId)}?fields=account_status,balance&access_token=${encodeURIComponent(token)}`);
+      if (!res.ok) continue;
+      const d = await res.json();
+      if (d.account_status !== undefined) {
+        const stMap = { 1: 'Active', 2: 'Disabled', 3: 'Payment Hold', 7: 'Restricted', 9: 'Restricted' };
+        a.status = stMap[d.account_status] || a.status;
+      }
+      if (d.balance !== undefined) a.unpaid = +(num(d.balance) / 100).toFixed(2);
+      a.updatedAt = Date.now(); updated++;
+    } catch (e) {}
+  }
+  if (updated) { save(); toast(`${updated}টি Ad Account Meta API থেকে আপডেট হয়েছে!`); }
+  else toast('Meta API থেকে ডাটা পাওয়া যায়নি! টোকেন মেয়াদ বা অনুমতি যাচাই করুন।', 'error');
+};
+
+// Customers, Retainers & Pages
 if ($('customerForm')) $('customerForm').onsubmit = e => {
   e.preventDefault();
   const name = $('custName').value.trim();
-  db.customers.push({ id: uid(), updatedAt: Date.now(), portalToken: uid().slice(-6), name, phone: $('custPhone').value.trim(), note: $('custNote').value.trim() });
+  db.customers.push({ id: uid(), updatedAt: Date.now(), portalToken: uid().slice(-6), name, phone: $('custPhone').value.trim(), retainer: num($('custRetainer')?.value), note: $('custNote').value.trim() });
   save(); logActivity(`নতুন কাস্টমার যুক্ত হয়েছে: ${name}`); e.target.reset(); toast('কাস্টমার সেভ হয়েছে!');
 };
 window.openEditCustomerModal = function(custId) {
   if (!hasPerm('canEdit')) return toast('আপনার এডিট করার অনুমতি নেই!', 'error');
   const c = db.customers.find(x => x.id === custId); if (!c) return;
-  $('editCustId').value = c.id; $('editCustName').value = c.name; $('editCustPhone').value = c.phone || ''; $('editCustNote').value = c.note || '';
-  $('editCustomerModal').style.display = 'flex';
+  $('editCustId').value = c.id; $('editCustName').value = c.name; $('editCustPhone').value = c.phone || '';
+  if ($('editCustRetainer')) $('editCustRetainer').value = num(c.retainer);
+  $('editCustNote').value = c.note || ''; $('editCustomerModal').style.display = 'flex';
 };
 if ($('editCustomerForm')) $('editCustomerForm').onsubmit = e => {
   e.preventDefault();
   if (!hasPerm('canEdit')) return toast('অনুমতি নেই!', 'error');
   const c = db.customers.find(x => x.id === $('editCustId').value);
-  if (c) { c.name = $('editCustName').value.trim(); c.phone = $('editCustPhone').value.trim(); c.note = $('editCustNote').value.trim(); c.updatedAt = Date.now(); save(); logActivity(`কাস্টমার আপডেট: ${c.name}`); closeModal('editCustomerModal'); toast('কাস্টমার আপডেট হয়েছে!'); }
+  if (c) { c.name = $('editCustName').value.trim(); c.phone = $('editCustPhone').value.trim(); c.retainer = num($('editCustRetainer')?.value); c.note = $('editCustNote').value.trim(); c.updatedAt = Date.now(); save(); logActivity(`কাস্টমার আপডেট: ${c.name}`); closeModal('editCustomerModal'); toast('কাস্টমার আপডেট হয়েছে!'); }
+};
+window.generateRetainerBills = function() {
+  const ym = today().slice(0, 7);
+  const eligible = db.customers.filter(c => num(c.retainer) > 0 && !db.works.some(w => w.customerId === c.id && w.retainerYm === ym));
+  if (!eligible.length) return toast(`চলতি মাসের (${ym}) রিটেইনার বিল ইতিমধ্যেই তৈরি হয়েছে বা কোনো রিটেইনার কাস্টমার নেই!`, 'warn');
+  if (!confirm(`${eligible.length} জন কাস্টমারের জন্য ${ym} মাসের রিটেইনার বিল তৈরি করবেন?`)) return;
+  eligible.forEach(c => {
+    const pg = db.pages.find(p => p.customerId === c.id)?.id || '';
+    db.works.push({ id: uid(), updatedAt: Date.now(), date: today(), customerId: c.id, pageId: pg, name: `Monthly Retainer (${ym})`, retainerYm: ym, days: 30, dollar: 0, rate: 1, actualDollar: 0, serviceFee: num(c.retainer), serviceFeeType: 'fixed', cardId: '', actualRate: 0, feePct: 0, other: 0, status: 'completed', note: 'Auto Monthly Retainer' });
+  });
+  save(); logActivity(`মাসিক রিটেইনার বিল তৈরি (${eligible.length} জন)`); toast(`${eligible.length}টি রিটেইনার বিল তৈরি হয়েছে!`);
 };
 window.deleteCustomer = function(custId) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const c = db.customers.find(x => x.id === custId); if (!c) return;
   if (!confirm(`"${c.name}" এবং এর সাথে যুক্ত সকল পেজ, কাজ ও পেমেন্ট রিসাইকেল বিনে পাঠাতে চান?`)) return;
-  const relPages = db.pages.filter(x => x.customerId === custId);
-  const relWorks = db.works.filter(x => x.customerId === custId);
-  const relPays = db.payments.filter(x => x.customerId === custId);
+  const relPages = db.pages.filter(x => x.customerId === custId), relWorks = db.works.filter(x => x.customerId === custId), relPays = db.payments.filter(x => x.customerId === custId);
   moveToTrash('customer_bundle', `কাস্টমার: ${c.name}`, { customer: c, pages: relPages, works: relWorks, payments: relPays });
-  markDeleted(custId);
-  relPages.forEach(p => markDeleted(p.id)); relWorks.forEach(w => markDeleted(w.id)); relPays.forEach(p => markDeleted(p.id));
-  db.customers = db.customers.filter(x => x.id !== custId);
-  db.pages = db.pages.filter(x => x.customerId !== custId);
-  db.works = db.works.filter(x => x.customerId !== custId);
-  db.payments = db.payments.filter(x => x.customerId !== custId);
-  delete db.reminderLogs[custId];
-  save(); logActivity(`কাস্টমার ট্র্যাশে পাঠানো হয়েছে: ${c.name}`); toast('কাস্টমার রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  markDeleted(custId); relPages.forEach(p => markDeleted(p.id)); relWorks.forEach(w => markDeleted(w.id)); relPays.forEach(p => markDeleted(p.id));
+  db.customers = db.customers.filter(x => x.id !== custId); db.pages = db.pages.filter(x => x.customerId !== custId);
+  db.works = db.works.filter(x => x.customerId !== custId); db.payments = db.payments.filter(x => x.customerId !== custId);
+  delete db.reminderLogs[custId]; save(); logActivity(`কাস্টমার ট্র্যাশে: ${c.name}`); toast('কাস্টমার রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
 if ($('pageForm')) $('pageForm').onsubmit = e => {
@@ -1158,15 +1117,13 @@ if ($('editPageForm')) $('editPageForm').onsubmit = e => {
 window.deletePage = function(pageId) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const p = db.pages.find(x => x.id === pageId); if (!p || !confirm('পেজটি রিসাইকেল বিনে পাঠাবেন?')) return;
-  moveToTrash('page', `পেজ: ${p.name}`, p); markDeleted(pageId);
-  db.pages = db.pages.filter(x => x.id !== pageId); save(); toast('পেজ রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('page', `পেজ: ${p.name}`, p); markDeleted(pageId); db.pages = db.pages.filter(x => x.id !== pageId); save(); toast('পেজ রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// Client Profile, Ledger, Text Summary & Read-Only Portal
+// Client Profile, Portal & Summary
 window.copyClientSummaryText = function(custId) {
   const c = db.customers.find(x => x.id === custId); if (!c) return;
-  const b = billed(custId), p = paid(custId), bal = p - b;
-  const works = db.works.filter(w => w.customerId === custId);
+  const b = billed(custId), p = paid(custId), bal = p - b, works = db.works.filter(w => w.customerId === custId);
   const totUsd = works.reduce((s, w) => s + num(w.actualDollar), 0);
   const balLine = bal < 0 ? `🔴 বকেয়া বাকি: ${money(-bal)}` : (bal > 0 ? `🟢 অ্যাডভান্স জমা: ${money(bal)}` : `✅ ব্যালেন্স: ৳0.00 (সমন্বিত)`);
   const recent = [...works].sort((a,b)=>b.date.localeCompare(a.date)).slice(0, 5).map(w => `• ${w.date}: ${w.name} (${usd(w.actualDollar)}) = ${money(bill(w))}`).join('\n');
@@ -1180,25 +1137,19 @@ window.shareClientPortalLink = async function(custId) {
   if (!cfg.url) return toast('শেয়ারযোগ্য লাইভ পোর্টাল লিংক তৈরি করতে Admin Panel-এ Firebase URL সেভ করুন!', 'warn');
   if (!c.portalToken) { c.portalToken = uid().slice(-6); c.updatedAt = Date.now(); save(); }
   const portalKey = `${c.id}_${c.portalToken}`;
-  const works = db.works.filter(w => w.customerId === custId).sort((a,b)=>b.date.localeCompare(a.date)).map(w => ({
-    date: w.date, name: w.name, page: pname(w.pageId), budget: num(w.dollar), spentUsd: num(w.actualDollar), bill: bill(w), status: w.status
-  }));
-  const payments = db.payments.filter(p => p.customerId === custId).sort((a,b)=>b.date.localeCompare(a.date)).map(p => ({
-    date: p.date, amount: num(p.amount), method: p.method, ref: p.ref || ''
-  }));
   const payload = {
-    updatedAt: new Date().toLocaleString('bn-BD'),
-    agencyName: db.agency?.name || 'Ads হিসাব ম্যানেজার', agencyPhone: db.agency?.phone || '',
-    payInfo: db.agency?.payInfo || '', customerName: c.name,
-    totalBill: billed(custId), totalPaid: paid(custId), balance: clientBalance(custId), works, payments
+    updatedAt: new Date().toLocaleString('bn-BD'), agencyName: db.agency?.name || 'Ads হিসাব ম্যানেজার',
+    agencyPhone: db.agency?.phone || '', payInfo: db.agency?.payInfo || '', customerName: c.name,
+    totalBill: billed(custId), totalPaid: paid(custId), balance: clientBalance(custId),
+    works: db.works.filter(w => w.customerId === custId).sort((a,b)=>b.date.localeCompare(a.date)).map(w => ({ date: w.date, name: w.name, page: pname(w.pageId), budget: num(w.dollar), spentUsd: num(w.actualDollar), bill: bill(w), status: w.status })),
+    payments: db.payments.filter(p => p.customerId === custId).sort((a,b)=>b.date.localeCompare(a.date)).map(p => ({ date: p.date, amount: num(p.amount), method: p.method, ref: p.ref || '' }))
   };
-  const clean = cfg.url.trim().replace(/\/+$/, '');
-  const endpoint = `${clean}/ads_hisab_portals/${portalKey}.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '');
+  const endpoint = `${cfg.url.trim().replace(/\/+$/, '')}/ads_hisab_portals/${portalKey}.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '');
   try {
     const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     copyText(`${location.origin}${location.pathname}?portal=${encodeURIComponent(portalKey)}`, 'ক্লায়েন্ট পোর্টাল লিংক');
-  } catch (err) { toast('পোর্টাল লিংক আপলোড করতে সমস্যা হয়েছে! Firebase সংযোগ যাচাই করুন।', 'error'); }
+  } catch (err) { toast('পোর্টাল লিংক আপলোড করতে সমস্যা হয়েছে!', 'error'); }
 };
 
 window.exportClientLedgerCsv = function(custId) {
@@ -1207,8 +1158,7 @@ window.exportClientLedgerCsv = function(custId) {
     ...db.works.filter(w => w.customerId === custId).map(w => ({ date: w.date, desc: `কাজ: ${w.name}`, debit: bill(w), credit: 0 })),
     ...db.payments.filter(p => p.customerId === custId).map(p => ({ date: p.date, desc: `পেমেন্ট (${p.method}) ${p.ref || ''}`, debit: 0, credit: num(p.amount) }))
   ].sort((a, b) => a.date.localeCompare(b.date));
-  let bal = 0;
-  const rows = [['Date', 'Description', 'Bill / Debit (BDT)', 'Paid / Credit (BDT)', 'Running Balance (BDT)']];
+  let bal = 0; const rows = [['Date', 'Description', 'Bill / Debit (BDT)', 'Paid / Credit (BDT)', 'Running Balance (BDT)']];
   entries.forEach(en => { bal += en.credit - en.debit; rows.push([en.date, en.desc, en.debit.toFixed(2), en.credit.toFixed(2), bal.toFixed(2)]); });
   downloadBlob('\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\n'), `ledger_${c.name.replace(/\s+/g, '_')}_${today()}.csv`, 'text/csv;charset=utf-8;');
   toast('লেজার স্টেটমেন্ট CSV ডাউনলোড হয়েছে!');
@@ -1216,13 +1166,9 @@ window.exportClientLedgerCsv = function(custId) {
 
 window.openClientProfile = function(custId) {
   const c = db.customers.find(x => x.id === custId); if (!c) return;
-  const cPages = db.pages.filter(p => p.customerId === custId);
-  const cWorks = db.works.filter(w => w.customerId === custId);
-  const cPays = db.payments.filter(p => p.customerId === custId);
+  const cPages = db.pages.filter(p => p.customerId === custId), cWorks = db.works.filter(w => w.customerId === custId), cPays = db.payments.filter(p => p.customerId === custId);
   const totalB = billed(custId), totalP = paid(custId), bal = clientBalance(custId);
-  const totalUsd = cWorks.reduce((s, w) => s + num(w.actualDollar), 0);
-  const totalProf = cWorks.reduce((s, w) => s + profit(w), 0);
-
+  const totalUsd = cWorks.reduce((s, w) => s + num(w.actualDollar), 0), totalProf = cWorks.reduce((s, w) => s + profit(w), 0);
   let balBadge = `<span class="badge-success">সমন্বিত (৳0.00)</span>`;
   if (bal < 0) balBadge = `<span class="badge-danger">বকেয়া বাকি: ${money(-bal)}</span>`;
   else if (bal > 0) balBadge = `<span class="badge-success">অ্যাডভান্স জমা: ${money(bal)}</span>`;
@@ -1242,9 +1188,8 @@ window.openClientProfile = function(custId) {
   $('cpBody').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px;background:var(--soft);border-radius:12px;border:1px solid var(--line)">
       <div style="font-size:13px;line-height:1.7">
-        <strong>মোবাইল:</strong> ${esc(c.phone || '—')}<br>
-        <strong>নোট:</strong> ${esc(c.note || '—')}<br>
-        <strong>মোট ব্যয়কৃত ডলার:</strong> ${usd(totalUsd)}
+        <strong>মোবাইল:</strong> ${esc(c.phone || '—')} · <strong>মাসিক রিটেইনার:</strong> ${num(c.retainer) ? money(c.retainer) : 'নেই'}<br>
+        <strong>নোট:</strong> ${esc(c.note || '—')} · <strong>মোট ব্যয়কৃত ডলার:</strong> ${usd(totalUsd)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button type="button" class="secondary sm" onclick="closeModal('clientProfileModal');openInvoice('${c.id}')">📄 ইনভয়েস</button>
@@ -1256,10 +1201,8 @@ window.openClientProfile = function(custId) {
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <span class="badge-admin">মোট বিল: ${money(totalB)}</span>
-      <span class="badge-success">মোট আদায়: ${money(totalP)}</span>
-      ${balBadge}
-      ${isStaff() ? '' : `<span class="badge-status status-running">নিট প্রফিট: ${money(totalProf)}</span>`}
+      <span class="badge-admin">মোট বিল: ${money(totalB)}</span><span class="badge-success">মোট আদায়: ${money(totalP)}</span>
+      ${balBadge} ${isStaff() ? '' : `<span class="badge-status status-running">নিট প্রফিট: ${money(totalProf)}</span>`}
     </div>
     <h4>📄 যুক্ত থাকা ফেসবুক পেজ ও পিক্সেল (${cPages.length})</h4>
     <ul style="font-size:13px;padding-left:20px;margin-bottom:16px;line-height:1.8">
@@ -1267,8 +1210,7 @@ window.openClientProfile = function(custId) {
     </ul>
     <h4>📑 তারিখ অনুযায়ী লেজার স্টেটমেন্ট (Debit / Credit)</h4>
     <div class="tablewrap" style="max-height:240px;margin-bottom:16px">
-      <table><thead><tr><th>তারিখ</th><th>বিবরণ</th><th>বিল (ডেবিট)</th><th>জমা (ক্রেডিট)</th><th>ব্যালেন্স</th></tr></thead>
-      <tbody>${ledgerHtml}</tbody></table>
+      <table><thead><tr><th>তারিখ</th><th>বিবরণ</th><th>বিল (ডেবিট)</th><th>জমা (ক্রেডিট)</th><th>ব্যালেন্স</th></tr></thead><tbody>${ledgerHtml}</tbody></table>
     </div>
     <h4>⚡ ক্যাম্পেইনসমূহ (${cWorks.length})</h4>
     <div class="tablewrap" style="max-height:170px">
@@ -1278,20 +1220,17 @@ window.openClientProfile = function(custId) {
   $('clientProfileModal').style.display = 'flex';
 };
 
-// Invoice Modal (Opening Balance + Service Fee + QR + PNG)
+// Invoice Modal + PNG Word Wrap + POS 80mm Print
 let currentInvoiceCustId = null;
 function getInvoiceFilteredData(custId) {
   const from = $('invFrom')?.value || '', to = $('invTo')?.value || '';
-  const allWorks = db.works.filter(w => w.customerId === custId);
-  const allPays = db.payments.filter(p => p.customerId === custId);
+  const allWorks = db.works.filter(w => w.customerId === custId), allPays = db.payments.filter(p => p.customerId === custId);
   const prevBill = from ? allWorks.filter(w => w.date < from).reduce((s, w) => s + bill(w), 0) : 0;
   const prevPaid = from ? allPays.filter(p => p.date < from).reduce((s, p) => s + num(p.amount), 0) : 0;
   const openingBal = prevPaid - prevBill;
-
   const custWorks = allWorks.filter(w => inDateRange(w.date, from, to));
   const custPays = allPays.filter(p => inDateRange(p.date, from, to)).sort((a, b) => b.date.localeCompare(a.date));
-  const b = custWorks.reduce((s, w) => s + bill(w), 0);
-  const p = custPays.reduce((s, pay) => s + num(pay.amount), 0);
+  const b = custWorks.reduce((s, w) => s + bill(w), 0), p = custPays.reduce((s, pay) => s + num(pay.amount), 0);
   return { from, to, openingBal, custWorks, custPays, b, p, bal: openingBal + p - b };
 }
 
@@ -1311,16 +1250,12 @@ window.openInvoice = function(custId, keepDates = false) {
 
   const { from, to, openingBal, custWorks, custPays, b, p, bal } = getInvoiceFilteredData(custId);
   if ($('invPeriodLabel')) $('invPeriodLabel').textContent = (from || to) ? `সময়কাল: ${from || 'শুরু'} থেকে ${to || 'আজ'}` : '';
-
   if ($('invOpeningRow')) {
     if (from && openingBal !== 0) {
       $('invOpeningRow').style.display = 'block';
-      $('invOpeningRow').innerHTML = openingBal < 0
-        ? `📌 <strong>পূর্বের বকেয়া জের (${esc(from)}-এর আগে):</strong> <span class="bad">${money(-openingBal)}</span>`
-        : `📌 <strong>পূর্বের অ্যাডভান্স জের (${esc(from)}-এর আগে):</strong> <span class="good">${money(openingBal)}</span>`;
+      $('invOpeningRow').innerHTML = openingBal < 0 ? `📌 <strong>পূর্বের বকেয়া জের (${esc(from)}-এর আগে):</strong> <span class="bad">${money(-openingBal)}</span>` : `📌 <strong>পূর্বের অ্যাডভান্স জের (${esc(from)}-এর আগে):</strong> <span class="good">${money(openingBal)}</span>`;
     } else $('invOpeningRow').style.display = 'none';
   }
-
   const stamp = $('invStatusStamp');
   if (bal > 0) { stamp.textContent = 'ADVANCE PAID'; stamp.className = 'badge-success'; }
   else if ((b > 0 || openingBal < 0) && bal === 0) { stamp.textContent = 'PAID'; stamp.className = 'badge-success'; }
@@ -1331,64 +1266,65 @@ window.openInvoice = function(custId, keepDates = false) {
     const svc = workServiceCharge(w);
     return `<tr><td>${esc(w.date)}</td><td>${esc(w.name)} (${esc(pname(w.pageId) || 'Page')})</td><td>${usd(w.actualDollar)} × ${money(w.rate)}${svc ? ` + চার্জ ${money(svc)}` : ''}</td><td>${money(bill(w))}</td></tr>`;
   }).join('') || `<tr><td colspan="4">নির্বাচিত সময়ে কোনো কাজের রেকর্ড নেই</td></tr>`;
-
-  $('invTotalBill').textContent = money(b);
-  $('invTotalPaid').textContent = money(p);
-
+  $('invTotalBill').textContent = money(b); $('invTotalPaid').textContent = money(p);
   if ($('invPayWrap') && $('invPayRows')) {
     $('invPayWrap').style.display = custPays.length ? 'block' : 'none';
-    $('invPayRows').innerHTML = custPays.slice(0, 12).map(pay =>
-      `<tr><td>${esc(pay.date)}</td><td>${esc(pay.method)}</td><td>${esc(pay.ref || pay.note || '—')}</td><td class="good">${money(pay.amount)}</td></tr>`
-    ).join('');
+    $('invPayRows').innerHTML = custPays.slice(0, 12).map(pay => `<tr><td>${esc(pay.date)}</td><td>${esc(pay.method)}</td><td>${esc(pay.ref || pay.note || '—')}</td><td class="good">${money(pay.amount)}</td></tr>`).join('');
   }
-
   if (bal > 0) $('invBalanceBox').innerHTML = `সর্বমোট অ্যাডভান্স: <strong style="color:#059669">${money(bal)}</strong>`;
   else $('invBalanceBox').innerHTML = `সর্বমোট বকেয়া: <strong id="invTotalDue" style="color:#dc2626">${money(Math.max(0, -bal))}</strong>`;
-
   if ($('invPayInfoBox')) {
     if (ag.payInfo) { $('invPayInfoBox').style.display = 'block'; $('invPayInfoBox').innerHTML = `<strong>💳 পেমেন্ট পাঠানোর মাধ্যম:</strong> ${esc(ag.payInfo)}`; }
     else $('invPayInfoBox').style.display = 'none';
   }
-  if ($('invSignWrap') && $('invSignText')) {
-    $('invSignWrap').style.display = ag.signText ? 'flex' : 'none';
-    $('invSignText').textContent = ag.signText || 'Authorized Signature';
-  }
+  if ($('invSignWrap') && $('invSignText')) { $('invSignWrap').style.display = ag.signText ? 'flex' : 'none'; $('invSignText').textContent = ag.signText || 'Authorized Signature'; }
   $('invoiceModal').style.display = 'flex';
 };
-
 if ($('invApplyBtn')) $('invApplyBtn').onclick = () => { if (currentInvoiceCustId) openInvoice(currentInvoiceCustId, true); };
 if ($('invResetBtn')) $('invResetBtn').onclick = () => { if (currentInvoiceCustId) openInvoice(currentInvoiceCustId, false); };
 
-window.printInvoice = function() {
+window.printInvoice = function(isPos = false) {
   document.body.classList.add('printing-invoice');
+  if (isPos) document.body.classList.add('printing-pos');
   window.print();
-  setTimeout(() => document.body.classList.remove('printing-invoice'), 400);
+  setTimeout(() => { document.body.classList.remove('printing-invoice', 'printing-pos'); }, 400);
 };
 
 function loadImgCors(src) {
-  return new Promise(resolve => {
-    if (!src) return resolve(null);
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img); img.onerror = () => resolve(null);
-    img.src = src;
-  });
+  return new Promise(resolve => { if (!src) return resolve(null); const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = src; });
+}
+function wrapTextLines(ctx, text, maxWidth) {
+  const words = String(text || '').split(/\s+/), lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && cur) { lines.push(cur); cur = w; }
+    else cur = test;
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
 }
 
 window.downloadInvoicePng = async function() {
   const customer = db.customers.find(c => c.id === currentInvoiceCustId); if (!customer) return;
   const { from, to, openingBal, custWorks, custPays, b, p, bal } = getInvoiceFilteredData(customer.id);
-  const ag = db.agency || {};
-  const shownPays = custPays.slice(0, 6);
+  const ag = db.agency || {}, shownPays = custPays.slice(0, 6);
   const [logoImg, qrImg] = await Promise.all([loadImgCors(ag.logoUrl), loadImgCors(ag.qrUrl)]);
 
-  const rowH = 32, openH = (from && openingBal !== 0) ? 34 : 0;
+  const W = 820;
+  const mCanvas = document.createElement('canvas'), mCtx = mCanvas.getContext('2d');
+  mCtx.font = '13px Inter, "Noto Sans Bengali", Arial, sans-serif';
+  const workWrapped = custWorks.map(w => ({ w, lines: wrapTextLines(mCtx, w.name || '', 280) }));
+  const worksTotalH = custWorks.length ? workWrapped.reduce((s, x) => s + Math.max(32, 14 + x.lines.length * 18), 0) : 32;
+  const payInfoLines = ag.payInfo ? wrapTextLines(mCtx, ag.payInfo, qrImg ? W - 210 : W - 110) : [];
+  const openH = (from && openingBal !== 0) ? 34 : 0;
   const paySectionH = shownPays.length ? (56 + shownPays.length * 28) : 0;
-  const payInfoH = (ag.payInfo || qrImg) ? 90 : 0;
+  const payInfoH = (payInfoLines.length || qrImg) ? Math.max(82, 42 + payInfoLines.length * 18) : 0;
   const signH = ag.signText ? 36 : 0;
-  const W = 820, H = 370 + openH + Math.max(1, custWorks.length) * rowH + paySectionH + payInfoH + signH;
+  const H = 370 + openH + worksTotalH + paySectionH + payInfoH + signH;
+
   const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 0, W, 10);
 
@@ -1417,11 +1353,7 @@ window.downloadInvoicePng = async function() {
   ctx.fillText(customer.name, 40, 159);
   ctx.fillStyle = '#475569'; ctx.font = '13px Inter, Arial, sans-serif';
   ctx.fillText(`ফোন: ${customer.phone || '—'}`, 40, 180);
-  if (from || to) {
-    ctx.textAlign = 'right'; ctx.fillStyle = '#64748b';
-    ctx.fillText(`সময়কাল: ${from || 'শুরু'} - ${to || 'আজ'}`, W - 40, 180);
-    ctx.textAlign = 'left';
-  }
+  if (from || to) { ctx.textAlign = 'right'; ctx.fillStyle = '#64748b'; ctx.fillText(`সময়কাল: ${from || 'শুরু'} - ${to || 'আজ'}`, W - 40, 180); ctx.textAlign = 'left'; }
 
   let y = 200;
   if (openH) {
@@ -1433,29 +1365,27 @@ window.downloadInvoicePng = async function() {
 
   ctx.fillStyle = '#f1f5f9'; ctx.fillRect(40, y, W - 80, 32);
   ctx.fillStyle = '#334155'; ctx.font = 'bold 13px Inter, "Noto Sans Bengali", Arial, sans-serif';
-  ctx.fillText('তারিখ', 52, y + 21); ctx.fillText('কাজের বিবরণ', 160, y + 21); ctx.fillText('ডলার × রেট', 465, y + 21);
-  ctx.textAlign = 'right'; ctx.fillText('বিল (৳)', W - 52, y + 21); ctx.textAlign = 'left';
-  y += 32;
+  ctx.fillText('তারিখ', 52, y + 21); ctx.fillText('কাজের বিবরণ', 155, y + 21); ctx.fillText('ডলার × রেট', 465, y + 21);
+  ctx.textAlign = 'right'; ctx.fillText('বিল (৳)', W - 52, y + 21); ctx.textAlign = 'left'; y += 32;
 
   if (!custWorks.length) {
-    ctx.fillStyle = '#64748b'; ctx.font = '13px Inter, Arial, sans-serif';
-    ctx.fillText('কোনো কাজের রেকর্ড নেই', 52, y + 21); y += rowH;
+    ctx.fillStyle = '#64748b'; ctx.font = '13px Inter, Arial, sans-serif'; ctx.fillText('কোনো কাজের রেকর্ড নেই', 52, y + 21); y += 32;
   } else {
-    custWorks.forEach((w, idx) => {
-      if (idx % 2 === 1) { ctx.fillStyle = '#f8fafc'; ctx.fillRect(40, y, W - 80, rowH); }
+    workWrapped.forEach(({ w, lines }, idx) => {
+      const rh = Math.max(32, 14 + lines.length * 18);
+      if (idx % 2 === 1) { ctx.fillStyle = '#f8fafc'; ctx.fillRect(40, y, W - 80, rh); }
       ctx.fillStyle = '#1e293b'; ctx.font = '13px Inter, "Noto Sans Bengali", Arial, sans-serif';
       ctx.fillText(w.date || '', 52, y + 21);
-      ctx.fillText(String(w.name).slice(0, 32), 160, y + 21);
+      lines.forEach((ln, li) => ctx.fillText(ln, 155, y + 21 + li * 18));
       const svc = workServiceCharge(w);
       ctx.fillText(`${usd(w.actualDollar)} × ${num(w.rate)}${svc ? ' + চার্জ' : ''}`, 465, y + 21);
       ctx.textAlign = 'right'; ctx.fillText(money(bill(w)), W - 52, y + 21); ctx.textAlign = 'left';
-      y += rowH;
+      y += rh;
     });
   }
 
   if (shownPays.length) {
-    y += 14;
-    ctx.fillStyle = '#334155'; ctx.font = 'bold 13px Inter, "Noto Sans Bengali", Arial, sans-serif';
+    y += 14; ctx.fillStyle = '#334155'; ctx.font = 'bold 13px Inter, "Noto Sans Bengali", Arial, sans-serif';
     ctx.fillText('আদায়কৃত পেমেন্ট বিবরণ:', 40, y + 12); y += 22;
     ctx.fillStyle = '#ecfdf5'; ctx.fillRect(40, y, W - 80, 26);
     ctx.fillStyle = '#065f46'; ctx.font = 'bold 12px Inter, "Noto Sans Bengali", Arial, sans-serif';
@@ -1470,9 +1400,7 @@ window.downloadInvoicePng = async function() {
     });
   }
 
-  y += 16;
-  ctx.fillStyle = '#f8fafc'; ctx.fillRect(40, y, W - 80, 50);
-  ctx.strokeStyle = '#cbd5e1'; ctx.strokeRect(40, y, W - 80, 50);
+  y += 16; ctx.fillStyle = '#f8fafc'; ctx.fillRect(40, y, W - 80, 50); ctx.strokeStyle = '#cbd5e1'; ctx.strokeRect(40, y, W - 80, 50);
   ctx.font = 'bold 14px Inter, "Noto Sans Bengali", Arial, sans-serif';
   ctx.fillStyle = '#0f172a'; ctx.fillText(`নির্বাচিত বিল: ${money(b)}`, 56, y + 30);
   ctx.fillStyle = '#059669'; ctx.fillText(`নির্বাচিত আদায়: ${money(p)}`, 315, y + 30);
@@ -1481,20 +1409,19 @@ window.downloadInvoicePng = async function() {
   else { ctx.fillStyle = '#dc2626'; ctx.fillText(`সর্বমোট বকেয়া: ${money(Math.max(0, -bal))}`, W - 56, y + 30); }
   y += 50;
 
-  if (ag.payInfo || qrImg) {
+  if (payInfoLines.length || qrImg) {
     y += 12;
-    if (ag.payInfo) {
-      ctx.fillStyle = '#eff6ff'; ctx.fillRect(40, y, qrImg ? W - 170 : W - 80, 62);
-      ctx.textAlign = 'left'; ctx.fillStyle = '#1e3a8a'; ctx.font = '12.5px Inter, "Noto Sans Bengali", Arial, sans-serif';
-      ctx.fillText('পেমেন্ট মাধ্যম:', 52, y + 22);
-      ctx.fillText(String(ag.payInfo).slice(0, 72), 52, y + 44);
+    if (payInfoLines.length) {
+      const boxH = Math.max(54, 34 + payInfoLines.length * 18);
+      ctx.fillStyle = '#eff6ff'; ctx.fillRect(40, y, qrImg ? W - 170 : W - 80, boxH);
+      ctx.textAlign = 'left'; ctx.fillStyle = '#1e3a8a'; ctx.font = 'bold 12.5px Inter, "Noto Sans Bengali", Arial, sans-serif';
+      ctx.fillText('পেমেন্ট মাধ্যম:', 52, y + 20);
+      ctx.font = '12px Inter, "Noto Sans Bengali", Arial, sans-serif';
+      payInfoLines.forEach((ln, li) => ctx.fillText(ln, 52, y + 38 + li * 18));
     }
-    if (qrImg) { try { ctx.drawImage(qrImg, W - 116, y - 4, 74, 74); } catch (e) {} }
+    if (qrImg) { try { ctx.drawImage(qrImg, W - 116, y - 2, 74, 74); } catch (e) {} }
   }
-  if (ag.signText) {
-    ctx.textAlign = 'right'; ctx.fillStyle = '#334155'; ctx.font = 'bold 12px Inter, "Noto Sans Bengali", Arial, sans-serif';
-    ctx.fillText(`স্বাক্ষর: ${ag.signText}`, W - 44, H - 38);
-  }
+  if (ag.signText) { ctx.textAlign = 'right'; ctx.fillStyle = '#334155'; ctx.font = 'bold 12px Inter, "Noto Sans Bengali", Arial, sans-serif'; ctx.fillText(`স্বাক্ষর: ${ag.signText}`, W - 44, H - 38); }
   ctx.textAlign = 'center'; ctx.fillStyle = '#64748b'; ctx.font = '12px Inter, "Noto Sans Bengali", Arial, sans-serif';
   ctx.fillText('ধন্যবাদ! আপনার ব্যবসার সফলতা কামনা করছি।', W / 2, H - 14);
 
@@ -1517,11 +1444,7 @@ if ($('addCardForm')) $('addCardForm').onsubmit = e => {
 if ($('depositForm')) $('depositForm').onsubmit = e => {
   e.preventDefault();
   if (!$('depositCard').value) return toast('প্রথমে একটি কার্ড যোগ করুন!', 'error');
-  db.cardDeposits.push({
-    id: uid(), updatedAt: Date.now(), cardId: $('depositCard').value, date: $('depositDate').value,
-    amount: num($('depositAmount').value), taka: num($('depositTaka').value),
-    method: $('depositMethod')?.value || 'Bank', note: $('depositNote').value.trim()
-  });
+  db.cardDeposits.push({ id: uid(), updatedAt: Date.now(), cardId: $('depositCard').value, date: $('depositDate').value, amount: num($('depositAmount').value), taka: num($('depositTaka').value), method: $('depositMethod')?.value || 'Bank', note: $('depositNote').value.trim() });
   save(); logActivity(`কার্ডে ডিপোজিট: $${$('depositAmount').value}`); e.target.reset(); $('depositDate').value = today(); toast('ডলার ডিপোজিট সেভ হয়েছে!');
 };
 if ($('cardTransferForm')) $('cardTransferForm').onsubmit = e => {
@@ -1542,31 +1465,19 @@ if ($('cardRefundForm')) $('cardRefundForm').onsubmit = e => {
   save(); logActivity(`ডলার রিফান্ড: $${amt}`); e.target.reset(); $('rfDate').value = today(); toast('রিফান্ড কার্ডে যোগ হয়েছে!');
 };
 
-window.editCardName = function(cardId) {
-  const c = db.cards.find(x => x.id === cardId); if (!c) return;
-  const n = prompt('কার্ডের নতুন নাম লিখুন:', c.name);
-  if (n && n.trim()) { c.name = n.trim(); c.updatedAt = Date.now(); save(); toast('কার্ডের নাম আপডেট হয়েছে!'); }
-};
+window.editCardName = function(cardId) { const c = db.cards.find(x => x.id === cardId); if (!c) return; const n = prompt('কার্ডের নতুন নাম লিখুন:', c.name); if (n && n.trim()) { c.name = n.trim(); c.updatedAt = Date.now(); save(); toast('কার্ডের নাম আপডেট হয়েছে!'); } };
 window.deleteCard = function(cardId) {
   if (!hasPerm('canDelete')) return toast('অনুমতি নেই!', 'error');
   const c = db.cards.find(x => x.id === cardId); if (!c || !confirm('কার্ডটি রিসাইকেল বিনে পাঠাবেন?')) return;
-  moveToTrash('card', `কার্ড: ${c.name}`, c); markDeleted(cardId);
-  db.cards = db.cards.filter(x => x.id !== cardId); save(); toast('কার্ড রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('card', `কার্ড: ${c.name}`, c); markDeleted(cardId); db.cards = db.cards.filter(x => x.id !== cardId); save(); toast('কার্ড রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 window.deleteDeposit = function(depId) {
   if (!hasPerm('canDelete')) return toast('অনুমতি নেই!', 'error');
   const d = db.cardDeposits.find(x => x.id === depId); if (!d || !confirm('ডিপোজিটটি রিসাইকেল বিনে পাঠাবেন?')) return;
-  moveToTrash('deposit', `ডিপোজিট: $${d.amount}`, d); markDeleted(depId);
-  db.cardDeposits = db.cardDeposits.filter(x => x.id !== depId); save(); toast('ডিপোজিট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('deposit', `ডিপোজিট: $${d.amount}`, d); markDeleted(depId); db.cardDeposits = db.cardDeposits.filter(x => x.id !== depId); save(); toast('ডিপোজিট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
-window.deleteTransfer = function(id) {
-  if (!hasPerm('canDelete') || !confirm('ট্রান্সফার রেকর্ড মুছে ফেলবেন?')) return;
-  markDeleted(id); db.cardTransfers = db.cardTransfers.filter(x => x.id !== id); save(); toast('ট্রান্সফার মুছে ফেলা হয়েছে', 'warn');
-};
-window.deleteRefund = function(id) {
-  if (!hasPerm('canDelete') || !confirm('রিফান্ড রেকর্ড মুছে ফেলবেন?')) return;
-  markDeleted(id); db.cardRefunds = db.cardRefunds.filter(x => x.id !== id); save(); toast('রিফান্ড মুছে ফেলা হয়েছে', 'warn');
-};
+window.deleteTransfer = function(id) { if (!hasPerm('canDelete') || !confirm('ট্রান্সফার রেকর্ড মুছে ফেলবেন?')) return; markDeleted(id); db.cardTransfers = db.cardTransfers.filter(x => x.id !== id); save(); toast('ট্রান্সফার মুছে ফেলা হয়েছে', 'warn'); };
+window.deleteRefund = function(id) { if (!hasPerm('canDelete') || !confirm('রিফান্ড রেকর্ড মুছে ফেলবেন?')) return; markDeleted(id); db.cardRefunds = db.cardRefunds.filter(x => x.id !== id); save(); toast('রিফান্ড মুছে ফেলা হয়েছে', 'warn'); };
 
 window.openCardStatement = function(cardId) {
   const c = db.cards.find(x => x.id === cardId); if (!c) return;
@@ -1577,132 +1488,109 @@ window.openCardStatement = function(cardId) {
   const trOut = db.cardTransfers.filter(t => t.fromCardId === cardId).map(t => ({ date: t.date, type: 'ট্রান্সফার (-)', desc: `${cnameCard(t.toCardId)}-এ ${t.note || ''}`, plus: 0, minus: num(t.amount) }));
   const spds = db.works.filter(w => w.cardId === cardId).map(w => ({ date: w.date, type: 'FB খরচ', desc: `${cname(w.customerId)} — ${w.name}`, plus: 0, minus: num(w.actualDollar) }));
   const all = [...deps, ...trIn, ...refs, ...trOut, ...spds].sort((a, b) => a.date.localeCompare(b.date));
-  let bal = 0;
-  const st = getCardStats(cardId);
+  let bal = 0; const st = getCardStats(cardId);
   $('csTitle').textContent = `💳 ${c.name} — কার্ড স্টেটমেন্ট`;
   $('csSummary').innerHTML = `<span class="badge-success">মোট জমা: ${usd(st.inUsd)}</span><span class="badge-danger">মোট খরচ/আউট: ${usd(st.outUsd)}</span><span class="badge-admin">বর্তমান ব্যালেন্স: ${usd(st.balance)}</span>`;
-  $('csRows').innerHTML = all.map(r => {
-    bal += r.plus - r.minus;
-    return `<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.desc)}</td><td class="good">${r.plus ? '+' + usd(r.plus) : '—'}</td><td class="bad">${r.minus ? '-' + usd(r.minus) : '—'}</td><td class="${bal < 0 ? 'bad' : 'good'}">${usd(bal)}</td></tr>`;
-  }).join('') || '<tr><td colspan="6">কোনো লেনদেন নেই</td></tr>';
+  $('csRows').innerHTML = all.map(r => { bal += r.plus - r.minus; return `<tr><td>${esc(r.date)}</td><td>${esc(r.type)}</td><td>${esc(r.desc)}</td><td class="good">${r.plus ? '+' + usd(r.plus) : '—'}</td><td class="bad">${r.minus ? '-' + usd(r.minus) : '—'}</td><td class="${bal < 0 ? 'bad' : 'good'}">${usd(bal)}</td></tr>`; }).join('') || '<tr><td colspan="6">কোনো লেনদেন নেই</td></tr>';
   $('cardStatementModal').style.display = 'flex';
 };
 
 function renderCards() {
   if (isStaff()) return;
   const totals = db.cards.map(c => ({ ...c, ...getCardStats(c.id) }));
-  if ($('cardMetrics')) $('cardMetrics').innerHTML = totals.map(c => `
-    <div class="metric-card m1" style="padding:15px">
-      <small>${esc(c.name)}</small><strong>${usd(c.balance)}</strong>
-      <span class="trend">গড় রেট: ${c.avgRate ? money(c.avgRate) : '—'}</span>
-    </div>`).join('') || `<div class="muted">কোনো কার্ড যোগ করা হয়নি</div>`;
-  if ($('dashCardSummary')) $('dashCardSummary').innerHTML = totals.map(c => `
-    <div style="padding:6px 10px;border-radius:9px;background:var(--soft);border:1px solid var(--line);font-size:12px">
-      <strong>${esc(c.name)}:</strong> <span class="${c.balance < 20 ? 'bad' : 'good'}">${usd(c.balance)}</span>
-    </div>`).join('') || `<span class="muted">কোনো কার্ড নেই</span>`;
-  if ($('cardBalanceRows')) $('cardBalanceRows').innerHTML = totals.map(c => `
-    <tr><td><strong>${esc(c.name)}</strong></td><td>${usd(c.inUsd)}</td><td>${money(c.inTk)}</td>
-      <td>${c.avgRate ? money(c.avgRate) : '—'}</td><td>${usd(c.outUsd)}</td>
-      <td class="${c.balance < 0 ? 'bad' : 'good'}">${usd(c.balance)}</td>
-      <td>
-        <button type="button" class="secondary sm" onclick="openCardStatement('${c.id}')">📄 স্টেটমেন্ট</button>
-        <button type="button" class="secondary sm" onclick="editCardName('${c.id}')">✏️</button>
-        <button type="button" class="danger sm perm-del" onclick="deleteCard('${c.id}')">মুছুন</button>
-      </td>
-    </tr>`).join('') || `<tr><td colspan="7">কোনো কার্ড নেই</td></tr>`;
-
+  if ($('cardMetrics')) $('cardMetrics').innerHTML = totals.map(c => `<div class="metric-card m1" style="padding:15px"><small>${esc(c.name)}</small><strong>${usd(c.balance)}</strong><span class="trend">গড় রেট: ${c.avgRate ? money(c.avgRate) : '—'}</span></div>`).join('') || `<div class="muted">কোনো কার্ড যোগ করা হয়নি</div>`;
+  if ($('dashCardSummary')) $('dashCardSummary').innerHTML = totals.map(c => `<div style="padding:6px 10px;border-radius:9px;background:var(--soft);border:1px solid var(--line);font-size:12px"><strong>${esc(c.name)}:</strong> <span class="${c.balance < 20 ? 'bad' : 'good'}">${usd(c.balance)}</span></div>`).join('') || `<span class="muted">কোনো কার্ড নেই</span>`;
+  if ($('cardBalanceRows')) $('cardBalanceRows').innerHTML = totals.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td>${usd(c.inUsd)}</td><td>${money(c.inTk)}</td><td>${c.avgRate ? money(c.avgRate) : '—'}</td><td>${usd(c.outUsd)}</td><td class="${c.balance < 0 ? 'bad' : 'good'}">${usd(c.balance)}</td><td><button type="button" class="secondary sm" onclick="openCardStatement('${c.id}')">📄 স্টেটমেন্ট</button><button type="button" class="secondary sm" onclick="editCardName('${c.id}')">✏️</button><button type="button" class="danger sm perm-del" onclick="deleteCard('${c.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="7">কোনো কার্ড নেই</td></tr>`;
   const cnameCard = id => db.cards.find(x => x.id === id)?.name || 'মুছে ফেলা কার্ড';
   if ($('depositHistoryRows')) $('depositHistoryRows').innerHTML = [...db.cardDeposits].sort((a,b) => b.date.localeCompare(a.date)).map(d => {
     const r = num(d.amount) > 0 ? num(d.taka) / num(d.amount) : 0;
-    return `<tr><td>${esc(d.date)}</td><td><strong>${esc(cnameCard(d.cardId))}</strong></td><td>${usd(d.amount)}</td><td>${money(d.taka)}</td><td>${r ? money(r) : '—'}</td><td><span class="badge-admin">${esc(d.method || 'Bank')}</span> ${esc(d.note || '')}</td>
-      <td><button type="button" class="secondary sm" onclick="openEditDepositModal('${d.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteDeposit('${d.id}')">মুছুন</button></td></tr>`;
+    return `<tr><td>${esc(d.date)}</td><td><strong>${esc(cnameCard(d.cardId))}</strong></td><td>${usd(d.amount)}</td><td>${money(d.taka)}</td><td>${r ? money(r) : '—'}</td><td><span class="badge-admin">${esc(d.method || 'Bank')}</span> ${esc(d.note || '')}</td><td><button type="button" class="secondary sm" onclick="openEditDepositModal('${d.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteDeposit('${d.id}')">মুছুন</button></td></tr>`;
   }).join('') || `<tr><td colspan="7">কোনো ডিপোজিট হিস্ট্রি নেই</td></tr>`;
-
-  if ($('cardTransferRows')) $('cardTransferRows').innerHTML = [...db.cardTransfers].sort((a,b) => b.date.localeCompare(a.date)).map(t => `
-    <tr><td>${esc(t.date)}</td><td>${esc(cnameCard(t.fromCardId))} → ${esc(cnameCard(t.toCardId))}</td><td><strong>${usd(t.amount)}</strong></td>
-    <td><button type="button" class="danger sm perm-del" onclick="deleteTransfer('${t.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="4">কোনো ট্রান্সফার নেই</td></tr>`;
-
-  if ($('cardRefundRows')) $('cardRefundRows').innerHTML = [...db.cardRefunds].sort((a,b) => b.date.localeCompare(a.date)).map(r => `
-    <tr><td>${esc(r.date)}</td><td>${esc(cnameCard(r.cardId))}</td><td class="good">+${usd(r.amount)}</td><td>${esc(r.note || '—')}</td>
-    <td><button type="button" class="danger sm perm-del" onclick="deleteRefund('${r.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="5">কোনো রিফান্ড নেই</td></tr>`;
+  if ($('cardTransferRows')) $('cardTransferRows').innerHTML = [...db.cardTransfers].sort((a,b) => b.date.localeCompare(a.date)).map(t => `<tr><td>${esc(t.date)}</td><td>${esc(cnameCard(t.fromCardId))} → ${esc(cnameCard(t.toCardId))}</td><td><strong>${usd(t.amount)}</strong></td><td><button type="button" class="danger sm perm-del" onclick="deleteTransfer('${t.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="4">কোনো ট্রান্সফার নেই</td></tr>`;
+  if ($('cardRefundRows')) $('cardRefundRows').innerHTML = [...db.cardRefunds].sort((a,b) => b.date.localeCompare(a.date)).map(r => `<tr><td>${esc(r.date)}</td><td>${esc(cnameCard(r.cardId))}</td><td class="good">+${usd(r.amount)}</td><td>${esc(r.note || '—')}</td><td><button type="button" class="danger sm perm-del" onclick="deleteRefund('${r.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="5">কোনো রিফান্ড নেই</td></tr>`;
 }
 
 window.openEditDepositModal = function(depId) {
   const d = db.cardDeposits.find(x => x.id === depId); if (!d) return;
-  fillSelect('edCard', db.cards, '');
-  $('edId').value = d.id; $('edCard').value = d.cardId; $('edDate').value = d.date;
-  $('edAmount').value = d.amount; $('edTaka').value = d.taka;
+  fillSelect('edCard', db.cards, ''); refreshWalletSelects();
+  $('edId').value = d.id; $('edCard').value = d.cardId; $('edDate').value = d.date; $('edAmount').value = d.amount; $('edTaka').value = d.taka;
   if ($('edMethod')) $('edMethod').value = d.method || 'Bank';
-  $('edNote').value = d.note || '';
-  $('editDepositModal').style.display = 'flex';
+  $('edNote').value = d.note || ''; $('editDepositModal').style.display = 'flex';
 };
 if ($('editDepositForm')) $('editDepositForm').onsubmit = e => {
   e.preventDefault();
   const d = db.cardDeposits.find(x => x.id === $('edId').value);
-  if (d) {
-    d.cardId = $('edCard').value; d.date = $('edDate').value; d.amount = num($('edAmount').value); d.taka = num($('edTaka').value);
-    d.method = $('edMethod')?.value || 'Bank'; d.note = $('edNote').value.trim(); d.updatedAt = Date.now();
-    save(); logActivity(`ডিপোজিট এডিট: $${d.amount}`); closeModal('editDepositModal'); toast('ডিপোজিট আপডেট হয়েছে!');
-  }
+  if (d) { d.cardId = $('edCard').value; d.date = $('edDate').value; d.amount = num($('edAmount').value); d.taka = num($('edTaka').value); d.method = $('edMethod')?.value || 'Bank'; d.note = $('edNote').value.trim(); d.updatedAt = Date.now(); save(); logActivity(`ডিপোজিট এডিট: $${d.amount}`); closeModal('editDepositModal'); toast('ডিপোজিট আপডেট হয়েছে!'); }
 };
 
 // Daily Rates
-if ($('rateForm')) $('rateForm').onsubmit = e => {
-  e.preventDefault();
-  db.rates.push({ id: uid(), updatedAt: Date.now(), date: $('rateDate').value, value: num($('rateValue').value), note: $('rateNote').value.trim() });
-  save(); e.target.reset(); $('rateDate').value = today(); toast('দৈনিক রেট সেভ হয়েছে!');
-};
+if ($('rateForm')) $('rateForm').onsubmit = e => { e.preventDefault(); db.rates.push({ id: uid(), updatedAt: Date.now(), date: $('rateDate').value, value: num($('rateValue').value), note: $('rateNote').value.trim() }); save(); e.target.reset(); $('rateDate').value = today(); toast('দৈনিক রেট সেভ হয়েছে!'); };
 window.openEditRateModal = function(id) {
   if (!hasPerm('canEdit')) return toast('আপনার এডিট করার অনুমতি নেই!', 'error');
   const r = db.rates.find(x => x.id === id); if (!r) return;
-  $('erId').value = r.id; $('erDate').value = r.date; $('erValue').value = r.value; $('erNote').value = r.note || '';
-  $('editRateModal').style.display = 'flex';
+  $('erId').value = r.id; $('erDate').value = r.date; $('erValue').value = r.value; $('erNote').value = r.note || ''; $('editRateModal').style.display = 'flex';
 };
 if ($('editRateForm')) $('editRateForm').onsubmit = e => {
-  e.preventDefault();
-  const r = db.rates.find(x => x.id === $('erId').value);
+  e.preventDefault(); const r = db.rates.find(x => x.id === $('erId').value);
   if (r) { r.date = $('erDate').value; r.value = num($('erValue').value); r.note = $('erNote').value.trim(); r.updatedAt = Date.now(); save(); closeModal('editRateModal'); toast('রেট আপডেট হয়েছে!'); }
 };
 window.deleteRate = function(id) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const r = db.rates.find(x => x.id === id); if (!r) return;
-  moveToTrash('rate', `ডলার রেট: ${money(r.value)} (${r.date})`, r); markDeleted(id);
-  db.rates = db.rates.filter(x => x.id !== id); save(); toast('রেট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('rate', `ডলার রেট: ${money(r.value)} (${r.date})`, r); markDeleted(id); db.rates = db.rates.filter(x => x.id !== id); save(); toast('রেট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// Works + Progress Bar + Quick Spend + Renew
+// Works + Daily Spend Modal + Renew + Bulk Actions
 window.quickAddSpend = function(workId) {
   const w = db.works.find(x => x.id === workId); if (!w) return;
   const add = prompt(`"${w.name}"-এ নতুন কত ডলার ($) খরচ যোগ করবেন?`, '10');
-  if (add === null) return;
-  const v = num(add); if (v <= 0) return toast('সঠিক ডলার সংখ্যা দিন', 'error');
+  if (add === null) return; const v = num(add); if (v <= 0) return toast('সঠিক ডলার সংখ্যা দিন', 'error');
   w.actualDollar = +(num(w.actualDollar) + v).toFixed(2); w.updatedAt = Date.now();
   save(); logActivity(`খরচ যোগ (+$${v}): ${w.name}`); toast(`+$${v} যোগ হয়েছে!`);
 };
+
+window.openDailySpendModal = function() {
+  const host = $('dailySpendList'); if (!host) return;
+  const running = db.works.filter(w => (w.status || 'running') === 'running' && num(w.dollar) > 0);
+  if (!running.length) return toast('কোনো চলমান বাজেটযুক্ত ক্যাম্পেইন পাওয়া যায়নি!', 'warn');
+  host.innerHTML = running.map(w => {
+    const daily = +(num(w.dollar) / Math.max(1, num(w.days))).toFixed(2);
+    const checked = num(w.actualDollar) < num(w.dollar) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;background:var(--soft);border:1px solid var(--line);border-radius:9px;margin:0;cursor:pointer">
+      <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)"><input type="checkbox" class="ds-chk row-chk" data-id="${w.id}" ${checked}> <span><strong>${esc(w.name)}</strong> <small class="muted">(${esc(cname(w.customerId))})</small></span></span>
+      <span style="display:flex;align-items:center;gap:6px"><small class="muted">ব্যবহৃত: ${usd(w.actualDollar)}/${usd(w.dollar)}</small><input type="number" step=".01" min="0" value="${daily}" class="ds-amt" data-id="${w.id}" style="width:76px;min-height:30px;padding:4px 6px"></span>
+    </label>`;
+  }).join('');
+  $('dailySpendModal').style.display = 'flex';
+};
+if ($('applyDailySpendConfirmBtn')) $('applyDailySpendConfirmBtn').onclick = () => {
+  const chks = [...document.querySelectorAll('.ds-chk:checked')];
+  if (!chks.length) return toast('কমপক্ষে একটি ক্যাম্পেইন নির্বাচন করুন!', 'warn');
+  let count = 0;
+  chks.forEach(ch => {
+    const id = ch.dataset.id, w = db.works.find(x => x.id === id);
+    const amtInput = document.querySelector(`.ds-amt[data-id="${id}"]`);
+    const amt = num(amtInput?.value);
+    if (w && amt > 0) { w.actualDollar = +(num(w.actualDollar) + amt).toFixed(2); w.updatedAt = Date.now(); count++; }
+  });
+  if (count) { save(); logActivity(`দৈনিক বাজেট যোগ (${count}টি কাজ)`); closeModal('dailySpendModal'); toast(`${count}টি ক্যাম্পেইনে আজকের দৈনিক খরচ যোগ হয়েছে!`); }
+};
+
 window.renewWork = function(workId) {
   const w = db.works.find(x => x.id === workId); if (!w) return;
-  goToSection('works');
-  $('wDate').value = today();
-  $('wCustomer').value = w.customerId || ''; updatePages();
-  $('wPage').value = w.pageId || '';
-  $('wName').value = w.name.replace(/ \(Renew\)$/i, '') + ' (Renew)';
-  $('wDays').value = w.days || 7;
-  $('wDollar').value = w.dollar || 0;
-  $('wRate').value = w.rate || rateFor(today());
-  $('wActualDollar').value = 0;
+  goToSection('works'); $('wDate').value = today(); $('wCustomer').value = w.customerId || ''; updatePages();
+  $('wPage').value = w.pageId || ''; $('wName').value = w.name.replace(/ \(Renew\)$/i, '') + ' (Renew)';
+  $('wDays').value = w.days || 7; $('wDollar').value = w.dollar || 0; $('wRate').value = w.rate || rateFor(today()); $('wActualDollar').value = 0;
   if ($('wServiceFee')) $('wServiceFee').value = w.serviceFee || 0;
   if ($('wServiceFeeType')) $('wServiceFeeType').value = w.serviceFeeType || 'fixed';
-  if (!isStaff()) {
-    $('wCard').value = w.cardId || '';
-    $('wActualRate').value = w.actualRate || cardAvgRate(w.cardId) || 0;
-    $('wFeePct').value = w.feePct || 0;
-    $('wOther').value = 0;
-  }
-  $('wStatus').value = 'running';
-  updateWorkPreview();
+  if ($('wStaff')) $('wStaff').value = w.staffName || '';
+  if ($('wCommPct')) $('wCommPct').value = num(w.commPct);
+  if (!isStaff()) { $('wCard').value = w.cardId || ''; $('wActualRate').value = w.actualRate || cardAvgRate(w.cardId) || 0; $('wFeePct').value = w.feePct || 0; $('wOther').value = 0; }
+  $('wStatus').value = 'running'; updateWorkPreview();
   document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
   toast('রিনিউ তথ্য ফর্মে বসানো হয়েছে — যাচাই করে সেভ করুন!');
 };
+
 function progressBarHtml(spent, budget) {
   if (!budget || budget <= 0) return '';
   const pct = Math.round((spent / budget) * 100);
@@ -1720,8 +1608,8 @@ if ($('workForm')) $('workForm').onsubmit = e => {
     name: $('wName').value.trim(), days: num($('wDays').value), dollar: num($('wDollar').value),
     rate, actualDollar: num($('wActualDollar').value),
     serviceFee: num($('wServiceFee')?.value), serviceFeeType: $('wServiceFeeType')?.value || 'fixed',
-    cardId: $('wCard').value, actualRate: num($('wActualRate').value),
-    feePct: num($('wFeePct').value), other: num($('wOther').value),
+    cardId: $('wCard').value, actualRate: num($('wActualRate').value), feePct: num($('wFeePct').value), other: num($('wOther').value),
+    staffName: $('wStaff')?.value || '', commPct: num($('wCommPct')?.value),
     revenue: num($('wRevenue').value), conversions: num($('wConversions').value),
     creativeLink: $('wCreativeLink').value.trim(), status: $('wStatus').value, note: $('wNote').value.trim()
   });
@@ -1741,6 +1629,8 @@ window.openEditWorkModal = function(workId) {
   $('ewRate').value = w.rate || 0; $('ewActualDollar').value = w.actualDollar || 0;
   if ($('ewServiceFee')) $('ewServiceFee').value = w.serviceFee || 0;
   if ($('ewServiceFeeType')) $('ewServiceFeeType').value = w.serviceFeeType || 'fixed';
+  if ($('ewStaff')) { if (w.staffName && ![...$('ewStaff').options].some(o => o.value === w.staffName)) $('ewStaff').add(new Option(w.staffName, w.staffName)); $('ewStaff').value = w.staffName || ''; }
+  if ($('ewCommPct')) $('ewCommPct').value = num(w.commPct);
   $('ewCard').value = w.cardId || ''; $('ewActualRate').value = w.actualRate || 0;
   $('ewFeePct').value = w.feePct || 0; $('ewOther').value = w.other || 0;
   $('ewRevenue').value = w.revenue || 0; $('ewConversions').value = w.conversions || 0;
@@ -1754,9 +1644,11 @@ if ($('editWorkForm')) $('editWorkForm').onsubmit = e => {
   w.pageId = $('ewPage').value; w.name = $('ewName').value.trim(); w.days = num($('ewDays').value);
   w.dollar = num($('ewDollar').value); w.rate = num($('ewRate').value); w.actualDollar = num($('ewActualDollar').value);
   w.serviceFee = num($('ewServiceFee')?.value); w.serviceFeeType = $('ewServiceFeeType')?.value || 'fixed';
+  w.staffName = $('ewStaff')?.value || '';
   if (!isStaff()) {
     w.cardId = $('ewCard').value; w.actualRate = num($('ewActualRate').value);
     w.feePct = num($('ewFeePct').value); w.other = num($('ewOther').value);
+    w.commPct = num($('ewCommPct')?.value);
   }
   w.revenue = num($('ewRevenue').value); w.conversions = num($('ewConversions').value);
   w.creativeLink = $('ewCreativeLink').value.trim(); w.status = $('ewStatus').value; w.note = $('ewNote').value.trim();
@@ -1765,41 +1657,86 @@ if ($('editWorkForm')) $('editWorkForm').onsubmit = e => {
 };
 window.cloneWork = function(workId) {
   const w = db.works.find(x => x.id === workId); if (!w) return;
-  const cloned = { ...w, id: uid(), updatedAt: Date.now(), date: today(), name: w.name + ' (Copy)' };
-  db.works.push(cloned); save(); logActivity(`কাজ ক্লোন: ${cloned.name}`); toast('ক্যাম্পেইন ক্লোন হয়েছে!');
+  db.works.push({ ...w, id: uid(), updatedAt: Date.now(), date: today(), name: w.name + ' (Copy)' });
+  save(); logActivity(`কাজ ক্লোন: ${w.name}`); toast('ক্যাম্পেইন ক্লোন হয়েছে!');
 };
 window.deleteWork = function(workId) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const w = db.works.find(x => x.id === workId); if (!w || !confirm('কাজটি রিসাইকেল বিনে পাঠাতে চান?')) return;
-  moveToTrash('work', `কাজ: ${w.name} (${cname(w.customerId)})`, w); markDeleted(workId);
+  moveToTrash('work', `কাজ: ${w.name} (${cname(w.customerId)})`, w); markDeleted(workId); selectedWorkIds.delete(workId);
   db.works = db.works.filter(x => x.id !== workId); save(); logActivity(`কাজ ট্র্যাশে: ${w.name}`); toast('কাজ রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// Expenses, Cash Adjustments & Payments
-if ($('expenseForm')) $('expenseForm').onsubmit = e => {
+window.toggleWorkSelect = function(id, checked) {
+  if (checked) selectedWorkIds.add(id); else selectedWorkIds.delete(id);
+  updateWorkBulkBar();
+};
+function updateWorkBulkBar() {
+  const bar = $('workBulkBar'), cnt = $('workSelectedCount');
+  if (!bar || !cnt) return;
+  cnt.textContent = selectedWorkIds.size;
+  bar.style.display = selectedWorkIds.size > 0 ? 'flex' : 'none';
+}
+if ($('workSelectAll')) $('workSelectAll').onchange = e => {
+  const checked = e.target.checked;
+  document.querySelectorAll('.work-row-chk').forEach(ch => {
+    ch.checked = checked;
+    if (checked) selectedWorkIds.add(ch.dataset.id); else selectedWorkIds.delete(ch.dataset.id);
+  });
+  updateWorkBulkBar();
+};
+window.bulkWorkStatus = function(status) {
+  if (!selectedWorkIds.size) return;
+  db.works.forEach(w => { if (selectedWorkIds.has(w.id)) { w.status = status; w.updatedAt = Date.now(); } });
+  const c = selectedWorkIds.size; selectedWorkIds.clear();
+  if ($('workSelectAll')) $('workSelectAll').checked = false;
+  save(); updateWorkBulkBar(); toast(`${c}টি কাজের স্ট্যাটাস আপডেট হয়েছে!`);
+};
+window.bulkDeleteWorks = function() {
+  if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
+  if (!selectedWorkIds.size || !confirm(`${selectedWorkIds.size}টি কাজ রিসাইকেল বিনে পাঠাতে চান?`)) return;
+  db.works.filter(w => selectedWorkIds.has(w.id)).forEach(w => { moveToTrash('work', `কাজ: ${w.name}`, w); markDeleted(w.id); });
+  db.works = db.works.filter(w => !selectedWorkIds.has(w.id));
+  selectedWorkIds.clear(); if ($('workSelectAll')) $('workSelectAll').checked = false;
+  save(); updateWorkBulkBar(); toast('নির্বাচিত কাজগুলো ট্র্যাশে পাঠানো হয়েছে', 'warn');
+};
+
+// Expenses, Custom Wallets, Cashbook & Payments
+if ($('addWalletForm')) $('addWalletForm').onsubmit = e => {
   e.preventDefault();
-  if (!hasPerm('canExpenses')) return toast('অনুমতি নেই!', 'error');
+  const name = $('newWalletInput').value.trim(); if (!name) return;
+  if (!db.wallets.some(w => w.toLowerCase() === name.toLowerCase())) {
+    db.wallets.push(name); save(); logActivity(`নতুন ওয়ালেট যুক্ত: ${name}`); toast(`${name} ওয়ালেট যুক্ত হয়েছে!`);
+  } else toast('এই ওয়ালেট আগেই আছে!', 'warn');
+  $('newWalletInput').value = '';
+};
+window.deleteWallet = function(name) {
+  if (['Cash', 'Bank'].includes(name)) return toast('Cash ও Bank ডিফল্ট ওয়ালেট মুছা যাবে না', 'warn');
+  if (!confirm(`"${name}" ওয়ালেট তালিকা থেকে সরাতে চান? (পুরোনো হিসাব মুছবে না)`)) return;
+  db.wallets = db.wallets.filter(w => w !== name); save(); toast(`${name} সরানো হয়েছে`, 'warn');
+};
+
+if ($('expenseForm')) $('expenseForm').onsubmit = e => {
+  e.preventDefault(); if (!hasPerm('canExpenses')) return toast('অনুমতি নেই!', 'error');
   db.expenses.push({ id: uid(), updatedAt: Date.now(), date: $('expDate').value, title: $('expTitle').value.trim(), category: $('expCategory').value, method: $('expMethod')?.value || 'Cash', amount: num($('expAmount').value), note: $('expNote').value.trim() });
   save(); logActivity(`অফিস খরচ: ${$('expTitle').value.trim()}`); e.target.reset(); $('expDate').value = today(); toast('অফিস খরচ সেভ হয়েছে!');
 };
 window.openEditExpenseModal = function(id) {
   if (!hasPerm('canEdit')) return toast('আপনার এডিট করার অনুমতি নেই!', 'error');
   const ex = db.expenses.find(x => x.id === id); if (!ex) return;
+  refreshWalletSelects();
   $('eeId').value = ex.id; $('eeDate').value = ex.date; $('eeTitle').value = ex.title; $('eeCategory').value = ex.category;
-  if ($('eeMethod')) $('eeMethod').value = ex.method || 'Cash';
-  $('eeAmount').value = ex.amount; $('eeNote').value = ex.note || '';
-  $('editExpenseModal').style.display = 'flex';
+  if ($('eeMethod')) { if (ex.method && ![...$('eeMethod').options].some(o => o.value === ex.method)) $('eeMethod').add(new Option(ex.method, ex.method)); $('eeMethod').value = ex.method || 'Cash'; }
+  $('eeAmount').value = ex.amount; $('eeNote').value = ex.note || ''; $('editExpenseModal').style.display = 'flex';
 };
 if ($('editExpenseForm')) $('editExpenseForm').onsubmit = e => {
-  e.preventDefault();
-  const ex = db.expenses.find(x => x.id === $('eeId').value);
+  e.preventDefault(); const ex = db.expenses.find(x => x.id === $('eeId').value);
   if (ex) { ex.date = $('eeDate').value; ex.title = $('eeTitle').value.trim(); ex.category = $('eeCategory').value; ex.method = $('eeMethod')?.value || 'Cash'; ex.amount = num($('eeAmount').value); ex.note = $('eeNote').value.trim(); ex.updatedAt = Date.now(); save(); closeModal('editExpenseModal'); toast('খরচ আপডেট হয়েছে!'); }
 };
 window.deleteExpense = function(id) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const ex = db.expenses.find(x => x.id === id); if (!ex || !confirm('খরচটি রিসাইকেল বিনে পাঠাবেন?')) return;
-  moveToTrash('expense', `খরচ: ${ex.title} (${money(ex.amount)})`, ex); markDeleted(id);
-  db.expenses = db.expenses.filter(x => x.id !== id); save(); toast('খরচ রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('expense', `খরচ: ${ex.title} (${money(ex.amount)})`, ex); markDeleted(id); db.expenses = db.expenses.filter(x => x.id !== id); save(); toast('খরচ রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
 if ($('cashAdjustForm')) $('cashAdjustForm').onsubmit = e => {
@@ -1807,119 +1744,86 @@ if ($('cashAdjustForm')) $('cashAdjustForm').onsubmit = e => {
   db.cashAdjustments.push({ id: uid(), updatedAt: Date.now(), date: $('caDate').value, method: $('caMethod').value, type: $('caType').value, amount: num($('caAmount').value), note: $('caNote').value.trim() });
   save(); logActivity(`ক্যাশবুক অ্যাডজাস্ট (${$('caMethod').value}): ৳${$('caAmount').value}`); e.target.reset(); $('caDate').value = today(); toast('ওয়ালেট ব্যালেন্স আপডেট হয়েছে!');
 };
+window.deleteCashAdjust = function(id) {
+  if (!hasPerm('canDelete') || !confirm('ক্যাশবুক এন্ট্রিটি মুছতে চান?')) return;
+  markDeleted(id); db.cashAdjustments = db.cashAdjustments.filter(x => x.id !== id); save(); toast('ক্যাশবুক এন্ট্রি মুছে ফেলা হয়েছে', 'warn');
+};
 
 if ($('paymentForm')) $('paymentForm').onsubmit = e => {
-  e.preventDefault();
-  if (!hasPerm('canPayments')) return toast('অনুমতি নেই!', 'error');
+  e.preventDefault(); if (!hasPerm('canPayments')) return toast('অনুমতি নেই!', 'error');
   db.payments.push({ id: uid(), updatedAt: Date.now(), date: $('pDate').value, customerId: $('pCustomer').value, amount: num($('pAmount').value), method: $('pMethod').value, fee: num($('pFee')?.value), ref: $('pRef').value.trim(), note: $('pNote').value.trim() });
   save(); logActivity(`পেমেন্ট জমা: ৳${$('pAmount').value}`); e.target.reset(); $('pDate').value = today(); if ($('pFee')) $('pFee').value = 0; updatePaymentCustomerStatus(); toast('পেমেন্ট সফলভাবে জমা হয়েছে!');
 };
 window.openEditPaymentModal = function(id) {
   if (!hasPerm('canEdit')) return toast('আপনার এডিট করার অনুমতি নেই!', 'error');
   const p = db.payments.find(x => x.id === id); if (!p) return;
-  refresh(); $('epId').value = p.id; $('epDate').value = p.date; $('epCustomer').value = p.customerId;
-  $('epAmount').value = p.amount; $('epMethod').value = p.method;
+  refresh(); $('epId').value = p.id; $('epDate').value = p.date; $('epCustomer').value = p.customerId; $('epAmount').value = p.amount;
+  if ($('epMethod')) { if (p.method && ![...$('epMethod').options].some(o => o.value === p.method)) $('epMethod').add(new Option(p.method, p.method)); $('epMethod').value = p.method; }
   if ($('epFee')) $('epFee').value = p.fee || 0;
-  $('epRef').value = p.ref || ''; $('epNote').value = p.note || '';
-  $('editPaymentModal').style.display = 'flex';
+  $('epRef').value = p.ref || ''; $('epNote').value = p.note || ''; $('editPaymentModal').style.display = 'flex';
 };
 if ($('editPaymentForm')) $('editPaymentForm').onsubmit = e => {
-  e.preventDefault();
-  const p = db.payments.find(x => x.id === $('epId').value);
+  e.preventDefault(); const p = db.payments.find(x => x.id === $('epId').value);
   if (p) { p.date = $('epDate').value; p.customerId = $('epCustomer').value; p.amount = num($('epAmount').value); p.method = $('epMethod').value; p.fee = num($('epFee')?.value); p.ref = $('epRef').value.trim(); p.note = $('epNote').value.trim(); p.updatedAt = Date.now(); save(); closeModal('editPaymentModal'); toast('পেমেন্ট আপডেট হয়েছে!'); }
 };
 window.deletePayment = function(id) {
   if (!hasPerm('canDelete')) return toast('আপনার ডিলিট করার অনুমতি নেই!', 'error');
   const p = db.payments.find(x => x.id === id); if (!p || !confirm('পেমেন্টটি রিসাইকেল বিনে পাঠাবেন?')) return;
-  moveToTrash('payment', `পেমেন্ট: ${cname(p.customerId)} (${money(p.amount)})`, p); markDeleted(id);
-  db.payments = db.payments.filter(x => x.id !== id); save(); toast('পেমেন্ট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
+  moveToTrash('payment', `পেমেন্ট: ${cname(p.customerId)} (${money(p.amount)})`, p); markDeleted(id); db.payments = db.payments.filter(x => x.id !== id); save(); toast('পেমেন্ট রিসাইকেল বিনে পাঠানো হয়েছে', 'warn');
 };
 
-// WhatsApp & Dues & Low Prepaid
+// WhatsApp & Dues
 function normalizeBdPhone(raw) {
   let d = String(raw || '').replace(/\D/g, '');
-  if (!d) return '';
-  if (d.startsWith('8801')) return d;
-  if (d.startsWith('01')) return '88' + d;
-  if (d.startsWith('1') && d.length === 10) return '880' + d;
+  if (!d) return ''; if (d.startsWith('8801')) return d; if (d.startsWith('01')) return '88' + d; if (d.startsWith('1') && d.length === 10) return '880' + d;
   return d;
 }
 window.sendWhatsAppReminder = function(custId) {
   const c = db.customers.find(x => x.id === custId); if (!c) return;
-  const waNum = normalizeBdPhone(c.phone);
-  if (!waNum) return toast('এই কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
-  const b = billed(custId), p = paid(custId), dueAmt = money(Math.max(0, b - p));
-  const agName = db.agency?.name || 'Ads হিসাব ম্যানেজার';
-  const payInfo = db.agency?.payInfo ? `পেমেন্ট মাধ্যম: ${db.agency.payInfo}` : '';
-  const tpl = db.agency?.waTemplate || DEFAULT_WA_TEMPLATE;
+  const waNum = normalizeBdPhone(c.phone); if (!waNum) return toast('এই কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
+  const b = billed(custId), p = paid(custId), dueAmt = money(Math.max(0, b - p)), agName = db.agency?.name || 'Ads হিসাব ম্যানেজার';
+  const payInfo = db.agency?.payInfo ? `পেমেন্ট মাধ্যম: ${db.agency.payInfo}` : '', tpl = db.agency?.waTemplate || DEFAULT_WA_TEMPLATE;
   const msg = tpl.replace(/\{name\}/g, c.name).replace(/\{agency\}/g, agName).replace(/\{bill\}/g, money(b)).replace(/\{paid\}/g, money(p)).replace(/\{due\}/g, dueAmt).replace(/\{payinfo\}/g, payInfo);
-  db.reminderLogs[custId] = new Date().toLocaleString('bn-BD');
-  save();
-  window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
-  toast('WhatsApp রিমাইন্ডার খোলা হয়েছে!');
+  db.reminderLogs[custId] = new Date().toLocaleString('bn-BD'); save();
+  window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank'); toast('WhatsApp রিমাইন্ডার খোলা হয়েছে!');
 };
 window.sendLowPrepaidWhatsApp = function(custId) {
   const c = db.customers.find(x => x.id === custId); if (!c) return;
-  const waNum = normalizeBdPhone(c.phone);
-  if (!waNum) return toast('কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
-  const bal = clientBalance(custId);
-  const msg = `আসসালামু আলাইকুম ${c.name}, ${db.agency?.name || 'Ads হিসাব ম্যানেজার'} থেকে জানাচ্ছি—আপনার অ্যাডভান্স অ্যাড ফান্ড ব্যালেন্স কমে মাত্র ${money(bal)} রয়েছে। বিজ্ঞাপন নিরবচ্ছিন্ন রাখতে অনুগ্রহ করে নতুন ফান্ড রিচার্জ করুন। ${db.agency?.payInfo || ''} ধন্যবাদ!`;
+  const waNum = normalizeBdPhone(c.phone); if (!waNum) return toast('কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
+  const msg = `আসসালামু আলাইকুম ${c.name}, ${db.agency?.name || 'Ads হিসাব ম্যানেজার'} থেকে জানাচ্ছি—আপনার অ্যাডভান্স অ্যাড ফান্ড ব্যালেন্স কমে মাত্র ${money(clientBalance(custId))} রয়েছে। অনুগ্রহ করে নতুন ফান্ড রিচার্জ করুন। ${db.agency?.payInfo || ''} ধন্যবাদ!`;
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 window.sendCampaignWhatsApp = function(workId) {
   const w = db.works.find(x => x.id === workId); if (!w) return;
   const c = db.customers.find(x => x.id === w.customerId); if (!c) return;
-  const waNum = normalizeBdPhone(c.phone);
-  if (!waNum) return toast('কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
+  const waNum = normalizeBdPhone(c.phone); if (!waNum) return toast('কাস্টমারের সঠিক মোবাইল নম্বর নেই!', 'error');
   const msg = `আসসালামু আলাইকুম ${c.name}, আপনার '${w.name}' ক্যাম্পেইনের আপডেট: ব্যবহৃত ডলার ${usd(w.actualDollar)}, মোট বিল ${money(bill(w))}, স্ট্যাটাস: ${w.status}। ধন্যবাদ - ${db.agency?.name || 'Ads হিসাব ম্যানেজার'}`;
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
 function renderDues() {
   const dueRows = db.customers.map(c => { const b = billed(c.id), p = paid(c.id); return { customer: c, bill: b, paid: p, bal: p - b }; });
-  const onlyDues = dueRows.filter(x => x.bal < 0);
-  const lowPrepaids = dueRows.filter(x => x.bal > 0 && x.bal < 1000);
-  const totalDueSum = onlyDues.reduce((s, x) => s + (-x.bal), 0);
-  const totalAdvSum = dueRows.filter(x => x.bal > 0).reduce((s, x) => s + x.bal, 0);
+  const onlyDues = dueRows.filter(x => x.bal < 0), lowPrepaids = dueRows.filter(x => x.bal > 0 && x.bal < 1000);
+  const totalDueSum = onlyDues.reduce((s, x) => s + (-x.bal), 0), totalAdvSum = dueRows.filter(x => x.bal > 0).reduce((s, x) => s + x.bal, 0);
 
-  if ($('dueMetrics')) $('dueMetrics').innerHTML = `
-    <div class="metric-card m4"><small>মোট বকেয়া পাওনা</small><strong>${money(totalDueSum)}</strong></div>
-    <div class="metric-card m3"><small>ক্লায়েন্টদের অ্যাডভান্স জমা</small><strong>${money(totalAdvSum)}</strong></div>
-    <div class="metric-card m1"><small>বকেয়া থাকা কাস্টমার</small><strong>${onlyDues.length} জন</strong></div>`;
-
+  if ($('dueMetrics')) $('dueMetrics').innerHTML = `<div class="metric-card m4"><small>মোট বকেয়া পাওনা</small><strong>${money(totalDueSum)}</strong></div><div class="metric-card m3"><small>ক্লায়েন্টদের অ্যাডভান্স জমা</small><strong>${money(totalAdvSum)}</strong></div><div class="metric-card m1"><small>বকেয়া থাকা কাস্টমার</small><strong>${onlyDues.length} জন</strong></div>`;
   if ($('dueRows')) $('dueRows').innerHTML = onlyDues.map(x => {
     const cid = x.customer.id, due = -x.bal;
     const lastLog = db.reminderLogs[cid] ? `<span class="good" style="font-size:11px">পাঠানো: ${esc(db.reminderLogs[cid])}</span>` : `<span class="muted">পাঠানো হয়নি</span>`;
-    const isOverdue = due > 5000 ? `<span class="badge-danger" style="margin-left:5px">High Due</span>` : '';
-    return `<tr>
-      <td><strong>${esc(x.customer.name)}</strong>${isOverdue}</td><td>${esc(x.customer.phone || '—')}</td>
-      <td>${money(x.bill)}</td><td>${money(x.paid)}</td><td class="bad">${money(due)}</td><td>${lastLog}</td>
-      <td><button type="button" class="secondary sm" onclick="sendWhatsAppReminder('${cid}')">📲 WhatsApp</button><button type="button" class="secondary sm" onclick="openInvoice('${cid}')">📄 ইনভয়েস</button></td>
-    </tr>`;
+    return `<tr><td><strong>${esc(x.customer.name)}</strong>${due > 5000 ? `<span class="badge-danger" style="margin-left:5px">High Due</span>` : ''}</td><td>${esc(x.customer.phone || '—')}</td><td>${money(x.bill)}</td><td>${money(x.paid)}</td><td class="bad">${money(due)}</td><td>${lastLog}</td><td><button type="button" class="secondary sm" onclick="sendWhatsAppReminder('${cid}')">📲 WhatsApp</button><button type="button" class="secondary sm" onclick="openInvoice('${cid}')">📄 ইনভয়েস</button></td></tr>`;
   }).join('') || `<tr><td colspan="7">কোনো কাস্টমারের বকেয়া নেই 🎉</td></tr>`;
 
-  if ($('lowPrepaidRows')) $('lowPrepaidRows').innerHTML = lowPrepaids.map(x => `
-    <tr><td><strong>${esc(x.customer.name)}</strong></td><td>${esc(x.customer.phone || '—')}</td>
-    <td class="bad">${money(x.bal)}</td>
-    <td><button type="button" class="warn sm" onclick="sendLowPrepaidWhatsApp('${x.customer.id}')">📲 রিচার্জ রিমাইন্ডার</button></td></tr>`).join('') || `<tr><td colspan="4">লো-অ্যাডভান্স কাস্টমার নেই ✅</td></tr>`;
-
+  if ($('lowPrepaidRows')) $('lowPrepaidRows').innerHTML = lowPrepaids.map(x => `<tr><td><strong>${esc(x.customer.name)}</strong></td><td>${esc(x.customer.phone || '—')}</td><td class="bad">${money(x.bal)}</td><td><button type="button" class="warn sm" onclick="sendLowPrepaidWhatsApp('${x.customer.id}')">📲 রিচার্জ রিমাইন্ডার</button></td></tr>`).join('') || `<tr><td colspan="4">লো-অ্যাডভান্স কাস্টমার নেই ✅</td></tr>`;
   if ($('dashLowPrepaidWrap') && $('dashLowPrepaidList')) {
     $('dashLowPrepaidWrap').style.display = lowPrepaids.length ? 'block' : 'none';
-    $('dashLowPrepaidList').innerHTML = lowPrepaids.slice(0, 4).map(x => `
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 9px;background:var(--soft);border-radius:8px;border:1px solid var(--line)">
-        <span><strong>${esc(x.customer.name)}</strong>: <span class="bad">${money(x.bal)}</span></span>
-        <button type="button" class="warn sm" style="margin:0" onclick="sendLowPrepaidWhatsApp('${x.customer.id}')">📲 রিচার্জ</button>
-      </div>`).join('');
+    $('dashLowPrepaidList').innerHTML = lowPrepaids.slice(0, 4).map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 9px;background:var(--soft);border-radius:8px;border:1px solid var(--line)"><span><strong>${esc(x.customer.name)}</strong>: <span class="bad">${money(x.bal)}</span></span><button type="button" class="warn sm" style="margin:0" onclick="sendLowPrepaidWhatsApp('${x.customer.id}')">📲 রিচার্জ</button></div>`).join('');
   }
 }
 
 // Notifications & Active Ads
 function updateNotifications() {
-  const notifList = $('notifList'), notifCount = $('notifCount');
-  if (!notifList || !notifCount) return;
-  const items = [];
-  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-
+  const notifList = $('notifList'), notifCount = $('notifCount'); if (!notifList || !notifCount) return;
+  const items = [], todayDate = new Date(); todayDate.setHours(0,0,0,0);
   db.works.forEach(w => {
     if (w.status === 'running' && w.days) {
       const startDate = new Date(w.date), expiryDate = new Date(startDate);
@@ -1929,36 +1833,22 @@ function updateNotifications() {
       else if (diffDays < 0) items.push({ key: `work_${w.id}_exp`, text: `⚠️ '${w.name}' ক্যাম্পেইনের মেয়াদ শেষ হয়েছে।`, tab: 'works' });
     }
   });
-
   if (hasPerm('canPayments')) {
     const dueCount = db.customers.filter(c => clientBalance(c.id) < 0).length;
     if (dueCount > 0) items.push({ key: `due_${dueCount}`, text: `📌 ${dueCount} জন কাস্টমারের কাছে বকেয়া পাওনা রয়েছে।`, tab: 'dues' });
     const lowCount = db.customers.filter(c => { const b = clientBalance(c.id); return b > 0 && b < 1000; }).length;
     if (lowCount > 0) items.push({ key: `low_${lowCount}`, text: `⚠️ ${lowCount} জন ক্লায়েন্টের অ্যাডভান্স ফান্ড শেষের দিকে।`, tab: 'dues' });
   }
-
   if (!isStaff()) {
-    db.cards.forEach(c => {
-      const st = getCardStats(c.id);
-      if (st.inUsd > 0 && st.balance < 20) items.push({ key: `card_${c.id}`, text: `💳 '${c.name}' কার্ডের ব্যালেন্স কম (${usd(st.balance)})!`, tab: 'cards' });
-    });
+    db.cards.forEach(c => { const st = getCardStats(c.id); if (st.inUsd > 0 && st.balance < 20) items.push({ key: `card_${c.id}`, text: `💳 '${c.name}' কার্ডের ব্যালেন্স কম (${usd(st.balance)})!`, tab: 'cards' }); });
     const openHelps = readHelpRequests().filter(h => h.status === 'open' && (isSuperAdmin() || h.target !== 'Super Admin'));
     if (openHelps.length > 0) items.push({ key: `help_${openHelps.length}`, text: `📩 ${openHelps.length} টি নতুন হেল্প মেসেজ এসেছে!`, tab: 'adminPanel', subTab: 'help' });
   }
-
-  const st = readNotifState();
-  const visibleItems = items.filter(i => !st.dismissed.includes(i.key));
+  const st = readNotifState(), visibleItems = items.filter(i => !st.dismissed.includes(i.key));
   currentNotifKeys = visibleItems.map(i => i.key);
   const unreadCount = visibleItems.filter(i => !st.seen.includes(i.key)).length;
-
-  if (unreadCount > 0) { notifCount.style.display = 'flex'; notifCount.textContent = unreadCount; }
-  else notifCount.style.display = 'none';
-
-  notifList.innerHTML = visibleItems.length ? visibleItems.map(i => `
-    <div class="notif-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px" onclick="goToSection('${i.tab}');${i.subTab ? `switchAdminSubTab('${i.subTab}');` : ''}$('notifBox').style.display='none'">
-      <span>${esc(i.text)}</span>
-      <button type="button" class="secondary sm" style="padding:1px 6px;margin:0;flex-shrink:0" onclick="dismissNotif(event,'${esc(i.key)}')" title="সরিয়ে দিন">✕</button>
-    </div>`).join('') : `<div class="notif-item">কোনো নতুন বিজ্ঞপ্তি নেই</div>`;
+  if (unreadCount > 0) { notifCount.style.display = 'flex'; notifCount.textContent = unreadCount; } else notifCount.style.display = 'none';
+  notifList.innerHTML = visibleItems.length ? visibleItems.map(i => `<div class="notif-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px" onclick="goToSection('${i.tab}');${i.subTab ? `switchAdminSubTab('${i.subTab}');` : ''}$('notifBox').style.display='none'"><span>${esc(i.text)}</span><button type="button" class="secondary sm" style="padding:1px 6px;margin:0;flex-shrink:0" onclick="dismissNotif(event,'${esc(i.key)}')">✕</button></div>`).join('') : `<div class="notif-item">কোনো নতুন বিজ্ঞপ্তি নেই</div>`;
 }
 
 function renderActiveCampaignsMonitor() {
@@ -1970,65 +1860,37 @@ function renderActiveCampaignsMonitor() {
     expiryDate.setDate(startDate.getDate() + Math.max(1, num(w.days))); expiryDate.setHours(0,0,0,0);
     const diffDays = Math.ceil((expiryDate - todayDate) / 86400000);
     const daily = num(w.days) > 0 ? (num(w.dollar) / num(w.days)) : num(w.dollar);
-    const badge = diffDays < 0 ? `<span class="badge-danger">মেয়াদ শেষ (${Math.abs(diffDays)} দিন আগে)</span>`
-      : (diffDays <= 1 ? `<span class="badge-status status-running">আজ/কাল শেষ</span>` : `<span class="badge-success">${diffDays} দিন বাকি</span>`);
-    return `<tr>
-      <td><strong>${esc(cname(w.customerId))}</strong><br><small class="muted">${esc(pname(w.pageId))}</small></td>
-      <td>${esc(w.name)}</td>
-      <td>${usd(w.dollar)} / <strong>${usd(w.actualDollar)}</strong>${progressBarHtml(num(w.actualDollar), num(w.dollar))}</td>
-      <td>${usd(daily)}/দিন</td><td>${badge}</td>
-      <td>
-        <button type="button" class="secondary sm" onclick="quickAddSpend('${w.id}')" title="দ্রুত খরচ যোগ">+$</button>
-        <button type="button" class="secondary sm" onclick="renewWork('${w.id}')" title="ক্যাম্পেইন রিনিউ করুন">🔄 Renew</button>
-        <button type="button" class="secondary sm perm-edit" onclick="openEditWorkModal('${w.id}')">✏️</button>
-        <button type="button" class="secondary sm" onclick="sendCampaignWhatsApp('${w.id}')" title="WhatsApp আপডেট">📲</button>
-      </td>
-    </tr>`;
+    const badge = diffDays < 0 ? `<span class="badge-danger">মেয়াদ শেষ (${Math.abs(diffDays)} দিন আগে)</span>` : (diffDays <= 1 ? `<span class="badge-status status-running">আজ/কাল শেষ</span>` : `<span class="badge-success">${diffDays} দিন বাকি</span>`);
+    return `<tr><td><strong>${esc(cname(w.customerId))}</strong><br><small class="muted">${esc(pname(w.pageId))}</small></td><td>${esc(w.name)}</td><td>${usd(w.dollar)} / <strong>${usd(w.actualDollar)}</strong>${progressBarHtml(num(w.actualDollar), num(w.dollar))}</td><td>${usd(daily)}/দিন</td><td>${badge}</td><td><button type="button" class="secondary sm" onclick="quickAddSpend('${w.id}')">+$</button><button type="button" class="secondary sm" onclick="renewWork('${w.id}')">🔄 Renew</button><button type="button" class="secondary sm perm-edit" onclick="openEditWorkModal('${w.id}')">✏️</button><button type="button" class="secondary sm" onclick="sendCampaignWhatsApp('${w.id}')">📲</button></td></tr>`;
   }).join('') || `<tr><td colspan="6">বর্তমানে কোনো চলমান (Running) ক্যাম্পেইন নেই</td></tr>`;
 }
 
 // Monthly Chart & Top Clients
 function renderMonthlyChart() {
   if (isStaff()) return;
-  const host = $('monthlyChart'), labelsHost = $('monthlyChartLabels');
-  if (!host || !labelsHost) return;
+  const host = $('monthlyChart'), labelsHost = $('monthlyChartLabels'); if (!host || !labelsHost) return;
   const bnMonths = ['জানু','ফেব্রু','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টে','অক্টো','নভে','ডিসে'];
   const now = new Date(), buckets = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    buckets.push({ ym, label: bnMonths[d.getMonth()] + "'" + String(d.getFullYear()).slice(-2), bill: 0, spend: 0, profit: 0 });
+    buckets.push({ ym: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'), label: bnMonths[d.getMonth()] + "'" + String(d.getFullYear()).slice(-2), bill: 0, spend: 0, profit: 0 });
   }
   db.works.forEach(w => { const b = buckets.find(x => x.ym === String(w.date || '').slice(0, 7)); if (b) { b.bill += bill(w); b.spend += actual(w) + num(w.other); } });
   db.expenses.forEach(e => { const b = buckets.find(x => x.ym === String(e.date || '').slice(0, 7)); if (b) b.spend += num(e.amount); });
   db.payments.forEach(p => { const b = buckets.find(x => x.ym === String(p.date || '').slice(0, 7)); if (b) b.spend += num(p.fee); });
   buckets.forEach(b => { b.profit = Math.max(0, b.bill - b.spend); });
   const max = Math.max(1, ...buckets.flatMap(b => [b.bill, b.spend, b.profit]));
-  host.innerHTML = buckets.map(b => `
-    <div style="flex:1;display:flex;align-items:flex-end;justify-content:center;gap:3px;height:100%" title="${b.label}: বিল ${money(b.bill)} | খরচ ${money(b.spend)} | লাভ ${money(b.bill - b.spend)}">
-      <div style="width:26%;height:${Math.max(4, b.bill / max * 100)}%;background:#2563eb;border-radius:4px 4px 0 0"></div>
-      <div style="width:26%;height:${Math.max(4, b.spend / max * 100)}%;background:#7c3aed;border-radius:4px 4px 0 0"></div>
-      <div style="width:26%;height:${Math.max(4, b.profit / max * 100)}%;background:#10b981;border-radius:4px 4px 0 0"></div>
-    </div>`).join('');
+  host.innerHTML = buckets.map(b => `<div style="flex:1;display:flex;align-items:flex-end;justify-content:center;gap:3px;height:100%" title="${b.label}: বিল ${money(b.bill)} | খরচ ${money(b.spend)} | লাভ ${money(b.bill - b.spend)}"><div style="width:26%;height:${Math.max(4, b.bill / max * 100)}%;background:#2563eb;border-radius:4px 4px 0 0"></div><div style="width:26%;height:${Math.max(4, b.spend / max * 100)}%;background:#7c3aed;border-radius:4px 4px 0 0"></div><div style="width:26%;height:${Math.max(4, b.profit / max * 100)}%;background:#10b981;border-radius:4px 4px 0 0"></div></div>`).join('');
   labelsHost.innerHTML = buckets.map(b => `<span style="flex:1;text-align:center">${b.label}</span>`).join('');
 }
-
 function renderTopClients() {
   const host = $('topClientsList'); if (!host) return;
   const list = db.customers.map(c => ({ name: c.name, total: billed(c.id) })).filter(x => x.total > 0).sort((a,b) => b.total - a.total).slice(0, 5);
   const topMax = Math.max(1, list[0]?.total || 1);
-  host.innerHTML = list.map((c, i) => `
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
-        <span><strong>#${i+1} ${esc(c.name)}</strong></span><strong style="color:var(--brand)">${money(c.total)}</strong>
-      </div>
-      <div style="height:6px;background:var(--soft);border-radius:99px;overflow:hidden">
-        <div style="height:100%;width:${(c.total / topMax * 100).toFixed(0)}%;background:linear-gradient(90deg,#3157e8,#7046e8);border-radius:99px"></div>
-      </div>
-    </div>`).join('') || '<div class="muted">এখনো কোনো বিলিং ডেটা নেই</div>';
+  host.innerHTML = list.map((c, i) => `<div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span><strong>#${i+1} ${esc(c.name)}</strong></span><strong style="color:var(--brand)">${money(c.total)}</strong></div><div style="height:6px;background:var(--soft);border-radius:99px;overflow:hidden"><div style="height:100%;width:${(c.total / topMax * 100).toFixed(0)}%;background:linear-gradient(90deg,#3157e8,#7046e8);border-radius:99px"></div></div></div>`).join('') || '<div class="muted">এখনো কোনো বিলিং ডেটা নেই</div>';
 }
 
-// Date Filters & Monthly Report
+// Monthly Report & Filters
 let dashFilterFrom = '', dashFilterTo = '';
 if ($('applyDashDates')) $('applyDashDates').onclick = () => { dashFilterFrom = $('dashFrom').value; dashFilterTo = $('dashTo').value; render(); };
 if ($('clearDashDates')) $('clearDashDates').onclick = () => { dashFilterFrom = ''; dashFilterTo = ''; $('dashFrom').value = ''; $('dashTo').value = ''; render(); };
@@ -2038,19 +1900,13 @@ function inDateRange(d, from, to) { return (!from || d >= from) && (!to || d <= 
 
 function renderMonthlyReport() {
   const from = $('repFrom')?.value || '', to = $('repTo')?.value || '';
-  const fWorks = db.works.filter(w => inDateRange(w.date, from, to));
-  const fPays = db.payments.filter(p => inDateRange(p.date, from, to));
-  const fExps = db.expenses.filter(e => inDateRange(e.date, from, to));
+  const fWorks = db.works.filter(w => inDateRange(w.date, from, to)), fPays = db.payments.filter(p => inDateRange(p.date, from, to)), fExps = db.expenses.filter(e => inDateRange(e.date, from, to));
   const b = fWorks.reduce((s, w) => s + bill(w), 0);
   const totalSpend = fWorks.reduce((s, w) => s + actual(w) + num(w.other), 0) + fExps.reduce((s, e) => s + num(e.amount), 0) + fPays.reduce((s, p) => s + num(p.fee), 0);
   const paidAmt = fPays.reduce((s, p) => s + num(p.amount), 0);
-  if ($('repBill')) $('repBill').textContent = money(b);
-  if ($('repPaid')) $('repPaid').textContent = money(paidAmt);
+  if ($('repBill')) $('repBill').textContent = money(b); if ($('repPaid')) $('repPaid').textContent = money(paidAmt);
   if (!isStaff()) { if ($('repSpend')) $('repSpend').textContent = money(totalSpend); if ($('repProfit')) $('repProfit').textContent = money(b - totalSpend); }
-  if ($('repWorkRows')) $('repWorkRows').innerHTML = fWorks.map(w => `
-    <tr><td>${esc(w.date)}</td><td><strong>${esc(cname(w.customerId))}</strong><br><small class="muted">${esc(pname(w.pageId))}</small></td>
-    <td>${esc(w.name)}</td><td>${money(bill(w))}</td>
-    ${isStaff() ? '' : `<td>${money(actual(w))}</td><td class="${profit(w) >= 0 ? 'good' : 'bad'}">${money(profit(w))}</td>`}</tr>`).join('') || `<tr><td colspan="${isStaff() ? 4 : 6}">এই সময়ে কোনো কাজ নেই</td></tr>`;
+  if ($('repWorkRows')) $('repWorkRows').innerHTML = fWorks.map(w => `<tr><td>${esc(w.date)}</td><td><strong>${esc(cname(w.customerId))}</strong><br><small class="muted">${esc(pname(w.pageId))}</small></td><td>${esc(w.name)}</td><td>${money(bill(w))}</td>${isStaff() ? '' : `<td>${money(actual(w))}</td><td class="${profit(w) >= 0 ? 'good' : 'bad'}">${money(profit(w))}</td>`}</tr>`).join('') || `<tr><td colspan="${isStaff() ? 4 : 6}">এই সময়ে কোনো কাজ নেই</td></tr>`;
 }
 if ($('applyRepDates')) $('applyRepDates').onclick = renderMonthlyReport;
 if ($('clearRepDates')) $('clearRepDates').onclick = () => { $('repFrom').value = today().slice(0, 8) + '01'; $('repTo').value = today(); renderMonthlyReport(); };
@@ -2058,8 +1914,7 @@ if ($('clearRepDates')) $('clearRepDates').onclick = () => { $('repFrom').value 
 function checkBackupReminder() {
   const bar = $('backupReminderBar'); if (!bar) return;
   if (isStaff() || (!db.customers.length && !db.works.length)) { bar.style.display = 'none'; return; }
-  const last = localStorage.getItem(LAST_BACKUP_KEY);
-  const diffDays = last ? Math.floor((new Date(today()) - new Date(last)) / 86400000) : 99;
+  const last = localStorage.getItem(LAST_BACKUP_KEY), diffDays = last ? Math.floor((new Date(today()) - new Date(last)) / 86400000) : 99;
   bar.style.display = (diffDays >= 7 && !sessionStorage.getItem('backup_dismissed_v72')) ? 'flex' : 'none';
 }
 
@@ -2067,11 +1922,7 @@ function renderPager(hostId, currentPage, totalItems, onPageFnName) {
   const host = $(hostId); if (!host) return;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   if (totalItems <= PAGE_SIZE) { host.innerHTML = ''; return; }
-  host.innerHTML = `<span>মোট ${totalItems}টি · পৃষ্ঠা ${currentPage} / ${totalPages}</span>
-    <div>
-      <button type="button" class="secondary sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="${onPageFnName}(${currentPage - 1})">◀ আগের</button>
-      <button type="button" class="secondary sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="${onPageFnName}(${currentPage + 1})">পরের ▶</button>
-    </div>`;
+  host.innerHTML = `<span>মোট ${totalItems}টি · পৃষ্ঠা ${currentPage} / ${totalPages}</span><div><button type="button" class="secondary sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="${onPageFnName}(${currentPage - 1})">◀ আগের</button><button type="button" class="secondary sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="${onPageFnName}(${currentPage + 1})">পরের ▶</button></div>`;
 }
 window.setCustPage = p => { custPage = p; render(); };
 window.setWorkPage = p => { workPage = p; render(); };
@@ -2081,26 +1932,20 @@ window.setPayPage = p => { payPage = p; render(); };
 function render() {
   refresh(); renderCards(); updateNotifications(); renderMonthlyChart(); renderTopClients(); renderActiveCampaignsMonitor();
 
-  const todayStr = today();
-  const todayWorks = db.works.filter(w => w.date === todayStr);
+  const todayStr = today(), todayWorks = db.works.filter(w => w.date === todayStr);
   const todayExp = db.expenses.filter(e => e.date === todayStr).reduce((s, e) => s + num(e.amount), 0);
   const todayPayFees = db.payments.filter(p => p.date === todayStr).reduce((s, p) => s + num(p.fee), 0);
-  const todayBill = todayWorks.reduce((s, w) => s + bill(w), 0);
-  const todaySpend = todayWorks.reduce((s, w) => s + actual(w) + num(w.other), 0);
-  const todayProfit = todayBill - todaySpend - todayExp - todayPayFees;
-
+  const todayBill = todayWorks.reduce((s, w) => s + bill(w), 0), todaySpend = todayWorks.reduce((s, w) => s + actual(w) + num(w.other), 0);
   if ($('mTodayBill')) $('mTodayBill').textContent = money(todayBill);
   if (!isStaff()) {
     if ($('mTodaySpend')) $('mTodaySpend').textContent = money(todaySpend);
-    if ($('mTodayProfit')) $('mTodayProfit').textContent = money(todayProfit);
+    if ($('mTodayProfit')) $('mTodayProfit').textContent = money(todayBill - todaySpend - todayExp - todayPayFees);
   }
 
   const fWorks = db.works.filter(w => inDateRange(w.date, dashFilterFrom, dashFilterTo));
   const fPays = db.payments.filter(p => inDateRange(p.date, dashFilterFrom, dashFilterTo));
   const fExps = db.expenses.filter(e => inDateRange(e.date, dashFilterFrom, dashFilterTo));
-
-  const totalBill = fWorks.reduce((s, w) => s + bill(w), 0);
-  const totalPaid = fPays.reduce((s, p) => s + num(p.amount), 0);
+  const totalBill = fWorks.reduce((s, w) => s + bill(w), 0), totalPaid = fPays.reduce((s, p) => s + num(p.amount), 0);
   const isFiltered = Boolean(dashFilterFrom || dashFilterTo);
   const allCustDue = isFiltered ? Math.max(0, totalBill - totalPaid) : db.customers.reduce((s, c) => s + Math.max(0, -clientBalance(c.id)), 0);
   const allCustAdv = isFiltered ? Math.max(0, totalPaid - totalBill) : db.customers.reduce((s, c) => s + Math.max(0, clientBalance(c.id)), 0);
@@ -2111,20 +1956,30 @@ function render() {
   if ($('mDue')) $('mDue').textContent = money(allCustDue);
 
   if (!isStaff()) {
-    const ad = fWorks.reduce((s, w) => s + actual(w), 0);
-    const otherCost = fWorks.reduce((s, w) => s + num(w.other), 0);
-    const periodOfficeExp = fExps.reduce((s, e) => s + num(e.amount), 0);
-    const periodPayFees = fPays.reduce((s, p) => s + num(p.fee), 0);
+    const ad = fWorks.reduce((s, w) => s + actual(w), 0), otherCost = fWorks.reduce((s, w) => s + num(w.other), 0);
+    const periodOfficeExp = fExps.reduce((s, e) => s + num(e.amount), 0), periodPayFees = fPays.reduce((s, p) => s + num(p.fee), 0);
+    const netP = totalBill - ad - otherCost - periodOfficeExp - periodPayFees;
     if ($('mActual')) $('mActual').textContent = money(ad);
-    if ($('mProfit')) $('mProfit').textContent = money(totalBill - ad - otherCost - periodOfficeExp - periodPayFees);
-  }
+    if ($('mProfit')) $('mProfit').textContent = money(netP);
 
-  // Wallets
-  if (!isStaff()) {
+    // Monthly Profit Goal Meter & Margin %
+    const ym = todayStr.slice(0, 7);
+    const mWorks = db.works.filter(w => String(w.date || '').startsWith(ym));
+    const mBill = mWorks.reduce((s, w) => s + bill(w), 0);
+    const mCost = mWorks.reduce((s, w) => s + actual(w) + num(w.other), 0) + db.expenses.filter(e => String(e.date || '').startsWith(ym)).reduce((s, e) => s + num(e.amount), 0) + db.payments.filter(p => String(p.date || '').startsWith(ym)).reduce((s, p) => s + num(p.fee), 0);
+    const mProfit = mBill - mCost, goal = num(db.agency?.monthlyGoal) || 100000;
+    const pct = goal > 0 ? Math.max(0, Math.min(100, Math.round((mProfit / goal) * 100))) : 0;
+    const margin = totalBill > 0 ? ((netP / totalBill) * 100).toFixed(1) : '0.0';
+    if ($('dashGoalText')) $('dashGoalText').innerHTML = `🎯 চলতি মাসের (${ym}) নিট প্রফিট টার্গেট: <strong>${money(mProfit)} / ${money(goal)}</strong> (${pct}%)`;
+    if ($('dashMarginText')) $('dashMarginText').textContent = `গড় প্রফিট মার্জিন: ${margin}%`;
+    if ($('dashGoalBar')) { $('dashGoalBar').style.width = `${pct}%`; $('dashGoalBar').style.background = pct >= 100 ? '#10b981' : (pct >= 50 ? '#3157e8' : '#f59e0b'); }
+
+    // Wallets + Chips + Cash Adjustments
+    if ($('walletListChips')) $('walletListChips').innerHTML = (db.wallets || []).map(w => `<span class="wallet-chip">${esc(w)}${['Cash','Bank'].includes(w) ? '' : `<button type="button" onclick="deleteWallet('${esc(w)}')" title="সরান">✕</button>`}</span>`).join('');
     const wBals = getWalletBalances();
-    const wHtml = Object.entries(wBals).map(([k, v]) => `<div class="wallet-card"><small>${esc(k)} ব্যালেন্স</small><strong class="${v < 0 ? 'bad' : 'good'}">${money(v)}</strong></div>`).join('');
-    if ($('walletMetrics')) $('walletMetrics').innerHTML = wHtml;
+    if ($('walletMetrics')) $('walletMetrics').innerHTML = Object.entries(wBals).map(([k, v]) => `<div class="wallet-card"><small>${esc(k)} ব্যালেন্স</small><strong class="${v < 0 ? 'bad' : 'good'}">${money(v)}</strong></div>`).join('');
     if ($('dashWalletSummary')) $('dashWalletSummary').innerHTML = Object.entries(wBals).filter(([k,v]) => k !== 'Card' || v !== 0).map(([k, v]) => `<div style="padding:5px 9px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-size:11.5px"><strong>${esc(k)}:</strong> <span class="${v < 0 ? 'bad' : 'good'}">${money(v)}</span></div>`).join('');
+    if ($('cashAdjustRows')) $('cashAdjustRows').innerHTML = [...db.cashAdjustments].sort((a,b) => b.date.localeCompare(a.date)).map(a => `<tr><td>${esc(a.date)}</td><td><strong>${esc(a.method)}</strong></td><td>${a.type === 'out' ? '<span class="bad">উত্তোলন (-)</span>' : '<span class="good">জমা (+)</span>'}</td><td>${money(a.amount)}</td><td>${esc(a.note || '—')}</td><td><button type="button" class="danger sm perm-del" onclick="deleteCashAdjust('${a.id}')">মুছুন</button></td></tr>`).join('') || '<tr><td colspan="6">কোনো অ্যাডজাস্টমেন্ট নেই</td></tr>';
   }
 
   // Customers (Paginated)
@@ -2136,127 +1991,96 @@ function render() {
   if ($('customerRows')) $('customerRows').innerHTML = pagedCustomers.map((c, idx) => {
     const b = billed(c.id), p = paid(c.id), bal = p - b;
     const balHtml = bal < 0 ? `<span class="bad">বকেয়া: ${money(-bal)}</span>` : (bal > 0 ? `<span class="good">অ্যাডভান্স: ${money(bal)}</span>` : `<span class="muted">৳0.00</span>`);
-    return `<tr><td>#${(custPage - 1) * PAGE_SIZE + idx + 1}</td><td><strong>${esc(c.name)}</strong></td><td>${esc(c.phone || '—')}</td>
-      <td>${db.pages.filter(pg => pg.customerId === c.id).length}</td><td>${money(b)}</td><td>${money(p)}</td><td>${balHtml}</td>
-      <td><button type="button" class="secondary sm" onclick="openClientProfile('${c.id}')">👤 প্রোফাইল</button><button type="button" class="secondary sm" onclick="openInvoice('${c.id}')">📄 ইনভয়েস</button><button type="button" class="secondary sm perm-edit" onclick="openEditCustomerModal('${c.id}')">✏️</button><button type="button" class="danger sm perm-del" onclick="deleteCustomer('${c.id}')">মুছুন</button></td></tr>`;
+    const retBadge = num(c.retainer) > 0 ? `<br><small class="muted">রিটেইনার: ${money(c.retainer)}/মাস</small>` : '';
+    return `<tr><td>#${(custPage - 1) * PAGE_SIZE + idx + 1}</td><td><strong>${esc(c.name)}</strong>${retBadge}</td><td>${esc(c.phone || '—')}</td><td>${db.pages.filter(pg => pg.customerId === c.id).length}</td><td>${money(b)}</td><td>${money(p)}</td><td>${balHtml}</td><td><button type="button" class="secondary sm" onclick="openClientProfile('${c.id}')">👤 প্রোফাইল</button><button type="button" class="secondary sm" onclick="openInvoice('${c.id}')">📄 ইনভয়েস</button><button type="button" class="secondary sm perm-edit" onclick="openEditCustomerModal('${c.id}')">✏️</button><button type="button" class="danger sm perm-del" onclick="deleteCustomer('${c.id}')">মুছুন</button></td></tr>`;
   }).join('') || `<tr><td colspan="8">কোনো কাস্টমার পাওয়া যায়নি</td></tr>`;
   renderPager('custPager', custPage, filteredCustomers.length, 'setCustPage');
 
   // Pages
-  if ($('pageRows')) $('pageRows').innerHTML = db.pages.map((p, idx) => `
-    <tr><td>#${idx + 1}</td><td>${esc(cname(p.customerId))}</td><td><strong>${esc(p.name)}</strong></td>
-      <td>${p.link ? `<a href="${esc(p.link)}" target="_blank">লিংক ↗</a>` : '—'}</td>
-      <td>${p.adId ? `<code>${esc(p.adId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(p.adId)}','Ad ID')">📋</button>` : '—'}</td>
-      <td>${p.pixelId ? `<code>${esc(p.pixelId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(p.pixelId)}','Pixel ID')">📋</button>` : '—'}</td>
-      <td><button type="button" class="secondary sm perm-edit" onclick="openEditPageModal('${p.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deletePage('${p.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="7">কোনো পেজ যুক্ত নেই</td></tr>`;
+  if ($('pageRows')) $('pageRows').innerHTML = db.pages.map((p, idx) => `<tr><td>#${idx + 1}</td><td>${esc(cname(p.customerId))}</td><td><strong>${esc(p.name)}</strong></td><td>${p.link ? `<a href="${esc(p.link)}" target="_blank">লিংক ↗</a>` : '—'}</td><td>${p.adId ? `<code>${esc(p.adId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(p.adId)}','Ad ID')">📋</button>` : '—'}</td><td>${p.pixelId ? `<code>${esc(p.pixelId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(p.pixelId)}','Pixel ID')">📋</button>` : '—'}</td><td><button type="button" class="secondary sm perm-edit" onclick="openEditPageModal('${p.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deletePage('${p.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="7">কোনো পেজ যুক্ত নেই</td></tr>`;
 
-  // Ad Accounts Health
+  // Ad Accounts
   const cnameCard = id => db.cards.find(x => x.id === id)?.name || '—';
   if ($('adAccountRows')) $('adAccountRows').innerHTML = db.adAccounts.map(a => {
     const stCls = a.status === 'Active' ? 'badge-success' : (a.status === 'Disabled' ? 'badge-danger' : 'badge-warn');
-    return `<tr><td><strong>${esc(a.name)}</strong><br><small class="muted">${esc(a.bm || 'BM নেই')}</small></td>
-      <td>${a.adId ? `<code>${esc(a.adId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(a.adId)}','Ad ID')">📋</button>` : '—'}</td>
-      <td>${esc(cnameCard(a.cardId))}</td>
-      <td>${usd(a.threshold)} / <span class="${num(a.unpaid) > 0 ? 'bad' : ''}">${usd(a.unpaid)}</span></td>
-      <td><span class="${stCls}" style="cursor:pointer" onclick="cycleAdAccountStatus('${a.id}')" title="স্ট্যাটাস বদলাতে ক্লিক করুন">${esc(a.status)}</span></td>
-      <td><button type="button" class="secondary sm" onclick="cycleAdAccountStatus('${a.id}')">🔄 স্ট্যাটাস</button><button type="button" class="danger sm perm-del" onclick="deleteAdAccount('${a.id}')">মুছুন</button></td></tr>`;
+    return `<tr><td><strong>${esc(a.name)}</strong><br><small class="muted">${esc(a.bm || 'BM নেই')}</small></td><td>${a.adId ? `<code>${esc(a.adId)}</code> <button type="button" class="secondary sm" onclick="copyText('${esc(a.adId)}','Ad ID')">📋</button>` : '—'}</td><td>${esc(cnameCard(a.cardId))}</td><td>${usd(a.threshold)} / <span class="${num(a.unpaid) > 0 ? 'bad' : ''}">${usd(a.unpaid)}</span></td><td><span class="${stCls}" style="cursor:pointer" onclick="cycleAdAccountStatus('${a.id}')">${esc(a.status)}</span></td><td><button type="button" class="secondary sm perm-edit" onclick="openEditAdAccountModal('${a.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteAdAccount('${a.id}')">মুছুন</button></td></tr>`;
   }).join('') || `<tr><td colspan="6">কোনো অ্যাড অ্যাকাউন্ট যুক্ত নেই</td></tr>`;
 
   // Rates
-  if ($('rateRows')) $('rateRows').innerHTML = [...db.rates].sort((a,b) => b.date.localeCompare(a.date)).map(r => `
-    <tr><td>${esc(r.date)}</td><td><strong>${money(r.value)}</strong></td><td>${esc(r.note || '—')}</td>
-      <td><button type="button" class="secondary sm perm-edit" onclick="openEditRateModal('${r.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteRate('${r.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="4">কোনো দৈনিক রেট সেভ করা নেই</td></tr>`;
+  if ($('rateRows')) $('rateRows').innerHTML = [...db.rates].sort((a,b) => b.date.localeCompare(a.date)).map(r => `<tr><td>${esc(r.date)}</td><td><strong>${money(r.value)}</strong></td><td>${esc(r.note || '—')}</td><td><button type="button" class="secondary sm perm-edit" onclick="openEditRateModal('${r.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteRate('${r.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="4">কোনো দৈনিক রেট সেভ করা নেই</td></tr>`;
 
-  // Works (Paginated + Audit Badges)
+  // Works (Paginated + Bulk Checkboxes + Staff + Audit)
   const workQuery = ($('workSearch')?.value || '').toLowerCase(), statusFilter = $('workStatusFilter')?.value || '', custFilter = $('workCustomerFilter')?.value || '';
-  const filteredWorksList = [...db.works].sort((a,b) => b.date.localeCompare(a.date)).filter(w => {
-    const matchText = w.name.toLowerCase().includes(workQuery) || cname(w.customerId).toLowerCase().includes(workQuery) || pname(w.pageId).toLowerCase().includes(workQuery);
-    return matchText && (!statusFilter || (w.status || 'running') === statusFilter) && (!custFilter || w.customerId === custFilter);
-  });
+  const filteredWorksList = [...db.works].sort((a,b) => b.date.localeCompare(a.date)).filter(w => (w.name.toLowerCase().includes(workQuery) || cname(w.customerId).toLowerCase().includes(workQuery) || pname(w.pageId).toLowerCase().includes(workQuery)) && (!statusFilter || (w.status || 'running') === statusFilter) && (!custFilter || w.customerId === custFilter));
   const totalWorkPages = Math.max(1, Math.ceil(filteredWorksList.length / PAGE_SIZE));
   if (workPage > totalWorkPages) workPage = totalWorkPages;
   const pagedWorks = filteredWorksList.slice((workPage - 1) * PAGE_SIZE, workPage * PAGE_SIZE);
 
   if ($('workRows')) $('workRows').innerHTML = pagedWorks.map((w, idx) => {
-    const st = w.status || 'running';
-    const stText = st === 'completed' ? 'সম্পন্ন' : (st === 'paused' ? 'পজ' : 'চলমান');
-    const stClass = st === 'completed' ? 'status-completed' : (st === 'paused' ? 'status-paused' : 'status-running');
-    const rev = num(w.revenue), totalCost = actual(w) + num(w.other);
-    const roasVal = totalCost > 0 ? (rev / totalCost).toFixed(2) : '0.00';
-    const convs = num(w.conversions), cpaVal = convs > 0 ? money(totalCost / convs) : '—';
+    const st = w.status || 'running', stText = st === 'completed' ? 'সম্পন্ন' : (st === 'paused' ? 'পজ' : 'চলমান'), stClass = st === 'completed' ? 'status-completed' : (st === 'paused' ? 'status-paused' : 'status-running');
+    const rev = num(w.revenue), totalCost = actual(w) + num(w.other), roasVal = totalCost > 0 ? (rev / totalCost).toFixed(2) : '0.00', convs = num(w.conversions), cpaVal = convs > 0 ? money(totalCost / convs) : '—';
     const creativeHtml = w.creativeLink ? `<br><a href="${esc(w.creativeLink)}" target="_blank" style="font-size:11px;color:var(--brand)">🎨 Creative</a>` : '';
+    const staffTxt = w.staffName ? `<br><small class="muted">👤 ${esc(w.staffName)}</small>` : '';
     const feeTxt = num(w.feePct) > 0 ? `<br><small class="muted">ফি ${w.feePct}%</small>` : '';
-    const svcAmt = workServiceCharge(w);
-    const svcTxt = svcAmt > 0 ? `<br><small class="muted">+চার্জ ${money(svcAmt)}</small>` : '';
+    const svcAmt = workServiceCharge(w), svcTxt = svcAmt > 0 ? `<br><small class="muted">+চার্জ ${money(svcAmt)}</small>` : '';
     const overBadge = (num(w.dollar) > 0 && num(w.actualDollar) > num(w.dollar)) ? `<span class="badge-warn" style="margin-left:4px">Over Budget</span>` : '';
     const lossBadge = (!isStaff() && profit(w) < 0) ? `<span class="badge-danger" style="margin-left:4px">Loss</span>` : '';
     return `<tr>
+      <td><input type="checkbox" class="work-row-chk row-chk" data-id="${w.id}" ${selectedWorkIds.has(w.id) ? 'checked' : ''} onchange="toggleWorkSelect('${w.id}',this.checked)"></td>
       <td>#${(workPage - 1) * PAGE_SIZE + idx + 1}</td><td>${esc(w.date)}</td>
       <td><strong>${esc(cname(w.customerId))}</strong><br><small class="muted">${esc(pname(w.pageId))}</small></td>
-      <td>${esc(w.name)}${overBadge}${creativeHtml}</td>
+      <td>${esc(w.name)}${overBadge}${staffTxt}${creativeHtml}</td>
       <td>${usd(w.actualDollar)} <small class="muted">/ ${usd(w.dollar)}</small>${progressBarHtml(num(w.actualDollar), num(w.dollar))}</td>
       <td>${money(bill(w))}${svcTxt}</td>
       ${isStaff() ? '' : `<td>${money(actual(w))}${feeTxt}</td><td class="${profit(w) >= 0 ? 'good' : 'bad'}">${money(profit(w))}${lossBadge}</td>`}
       <td><small>ROAS: <strong>${roasVal}x</strong><br>CPA: <strong>${cpaVal}</strong></small></td>
       <td><span class="badge-status ${stClass}">${stText}</span></td>
-      <td>
-        <button type="button" class="secondary sm" onclick="quickAddSpend('${w.id}')" title="দ্রুত খরচ যোগ">+$</button>
-        <button type="button" class="secondary sm perm-edit" onclick="openEditWorkModal('${w.id}')">✏️</button>
-        <button type="button" class="secondary sm" onclick="renewWork('${w.id}')" title="রিনিউ করুন">🔄</button>
-        <button type="button" class="secondary sm" onclick="cloneWork('${w.id}')">কপি</button>
-        <button type="button" class="secondary sm" onclick="sendCampaignWhatsApp('${w.id}')" title="WhatsApp">📲</button>
-        <button type="button" class="danger sm perm-del" onclick="deleteWork('${w.id}')">মুছুন</button>
-      </td>
+      <td><button type="button" class="secondary sm" onclick="quickAddSpend('${w.id}')">+$</button><button type="button" class="secondary sm perm-edit" onclick="openEditWorkModal('${w.id}')">✏️</button><button type="button" class="secondary sm" onclick="renewWork('${w.id}')">🔄</button><button type="button" class="secondary sm" onclick="cloneWork('${w.id}')">কপি</button><button type="button" class="secondary sm" onclick="sendCampaignWhatsApp('${w.id}')">📲</button><button type="button" class="danger sm perm-del" onclick="deleteWork('${w.id}')">মুছুন</button></td>
     </tr>`;
-  }).join('') || `<tr><td colspan="${isStaff() ? 9 : 11}">কোনো কাজ পাওয়া যায়নি</td></tr>`;
+  }).join('') || `<tr><td colspan="${isStaff() ? 10 : 12}">কোনো কাজ পাওয়া যায়নি</td></tr>`;
   renderPager('workPager', workPage, filteredWorksList.length, 'setWorkPage');
+  updateWorkBulkBar();
 
   // Pixels
-  if ($('pixelListRows')) $('pixelListRows').innerHTML = db.pages.filter(p => p.pixelId).map(p => `
-    <tr><td>${esc(cname(p.customerId))}</td><td>${esc(p.name)}</td><td><code>${esc(p.pixelId)}</code></td>
-      <td><span class="badge-success">Active / Ready</span></td>
-      <td><button type="button" class="secondary sm" onclick="$('genPixelId').value='${esc(p.pixelId)}';generatePixelCode();toast('পিক্সেল কোড জেনারেট হয়েছে')">কোড জেনারেট</button></td></tr>`).join('') || `<tr><td colspan="5">কোনো সেভ থাকা পিক্সেল আইডি নেই</td></tr>`;
+  if ($('pixelListRows')) $('pixelListRows').innerHTML = db.pages.filter(p => p.pixelId).map(p => `<tr><td>${esc(cname(p.customerId))}</td><td>${esc(p.name)}</td><td><code>${esc(p.pixelId)}</code></td><td><span class="badge-success">Active</span></td><td><button type="button" class="secondary sm" onclick="$('genPixelId').value='${esc(p.pixelId)}';generatePixelCode();toast('পিক্সেল কোড জেনারেট হয়েছে')">কোড জেনারেট</button></td></tr>`).join('') || `<tr><td colspan="5">কোনো সেভ থাকা পিক্সেল আইডি নেই</td></tr>`;
 
   // Expenses
   const totalAllOfficeExp = db.expenses.reduce((s, e) => s + num(e.amount), 0);
-  if ($('expenseRows')) $('expenseRows').innerHTML = [...db.expenses].sort((a,b) => b.date.localeCompare(a.date)).map(e => `
-    <tr><td>${esc(e.date)}</td><td><strong>${esc(e.title)}</strong></td><td><span class="badge-admin">${esc(e.category)}</span> <small class="muted">${esc(e.method || 'Cash')}</small></td>
-      <td class="bad">${money(e.amount)}</td><td>${esc(e.note || '—')}</td>
-      <td><button type="button" class="secondary sm perm-edit" onclick="openEditExpenseModal('${e.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteExpense('${e.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="6">কোনো খরচ রেকর্ড নেই</td></tr>`;
+  if ($('expenseRows')) $('expenseRows').innerHTML = [...db.expenses].sort((a,b) => b.date.localeCompare(a.date)).map(e => `<tr><td>${esc(e.date)}</td><td><strong>${esc(e.title)}</strong></td><td><span class="badge-admin">${esc(e.category)}</span> <small class="muted">${esc(e.method || 'Cash')}</small></td><td class="bad">${money(e.amount)}</td><td>${esc(e.note || '—')}</td><td><button type="button" class="secondary sm perm-edit" onclick="openEditExpenseModal('${e.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deleteExpense('${e.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="6">কোনো খরচ রেকর্ড নেই</td></tr>`;
   if ($('totalExpenseSummary')) $('totalExpenseSummary').textContent = `মোট অফিস খরচ: ${money(totalAllOfficeExp)}`;
   if ($('expenseCategorySummary')) {
-    const catTotals = {};
-    db.expenses.forEach(ex => { catTotals[ex.category] = (catTotals[ex.category] || 0) + num(ex.amount); });
-    $('expenseCategorySummary').innerHTML = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).map(([cat, amt]) => {
-      const pct = totalAllOfficeExp > 0 ? ((amt / totalAllOfficeExp) * 100).toFixed(0) : 0;
-      return `<span class="badge-admin" style="padding:6px 11px;font-size:12px">${esc(cat)}: <strong>${money(amt)}</strong> (${pct}%)</span>`;
-    }).join('');
+    const catTotals = {}; db.expenses.forEach(ex => { catTotals[ex.category] = (catTotals[ex.category] || 0) + num(ex.amount); });
+    $('expenseCategorySummary').innerHTML = Object.entries(catTotals).sort((a,b) => b[1] - a[1]).map(([cat, amt]) => `<span class="badge-admin" style="padding:6px 11px;font-size:12px">${esc(cat)}: <strong>${money(amt)}</strong> (${totalAllOfficeExp > 0 ? ((amt / totalAllOfficeExp) * 100).toFixed(0) : 0}%)</span>`).join('');
   }
-  updatePaymentCustomerStatus();
-  checkBackupReminder();
+  updatePaymentCustomerStatus(); checkBackupReminder();
 
-  // Payments (Paginated)
+  // Payments
   const sortedPays = [...db.payments].sort((a,b) => b.date.localeCompare(a.date));
   const totalPayPages = Math.max(1, Math.ceil(sortedPays.length / PAGE_SIZE));
   if (payPage > totalPayPages) payPage = totalPayPages;
   const pagedPays = sortedPays.slice((payPage - 1) * PAGE_SIZE, payPage * PAGE_SIZE);
-  if ($('paymentRows')) $('paymentRows').innerHTML = pagedPays.map(p => `
-    <tr><td>${esc(p.date)}</td><td><strong>${esc(cname(p.customerId))}</strong></td>
-      <td class="good">${money(p.amount)}${num(p.fee) > 0 ? `<br><small class="bad">চার্জ: -${money(p.fee)}</small>` : ''}</td>
-      <td>${esc(p.method)}</td><td>${esc(p.ref || p.note || '—')}</td>
-      <td><button type="button" class="secondary sm perm-edit" onclick="openEditPaymentModal('${p.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deletePayment('${p.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="6">কোনো পেমেন্ট রেকর্ড নেই</td></tr>`;
+  if ($('paymentRows')) $('paymentRows').innerHTML = pagedPays.map(p => `<tr><td>${esc(p.date)}</td><td><strong>${esc(cname(p.customerId))}</strong></td><td class="good">${money(p.amount)}${num(p.fee) > 0 ? `<br><small class="bad">চার্জ: -${money(p.fee)}</small>` : ''}</td><td>${esc(p.method)}</td><td>${esc(p.ref || p.note || '—')}</td><td><button type="button" class="secondary sm perm-edit" onclick="openEditPaymentModal('${p.id}')">✏️ এডিট</button><button type="button" class="danger sm perm-del" onclick="deletePayment('${p.id}')">মুছুন</button></td></tr>`).join('') || `<tr><td colspan="6">কোনো পেমেন্ট রেকর্ড নেই</td></tr>`;
   renderPager('payPager', payPage, sortedPays.length, 'setPayPage');
 
-  // Summary Report
-  if (!isStaff() && $('reportRows')) $('reportRows').innerHTML = db.customers.map(c => {
-    const b = billed(c.id), p = paid(c.id), bal = p - b;
-    const cw = db.works.filter(w => w.customerId === c.id);
-    const totalUSD = cw.reduce((s, w) => s + num(w.actualDollar), 0);
-    const prCust = cw.reduce((s, w) => s + profit(w), 0);
-    const balHtml = bal < 0 ? `<span class="bad">বকেয়া: ${money(-bal)}</span>` : (bal > 0 ? `<span class="good">অ্যাডভান্স: ${money(bal)}</span>` : `৳0.00`);
-    return `<tr><td><strong>${esc(c.name)}</strong></td><td>${usd(totalUSD)}</td><td>${money(b)}</td><td>${money(p)}</td><td>${balHtml}</td><td class="${prCust >= 0 ? 'good' : 'bad'}">${money(prCust)}</td></tr>`;
-  }).join('') || `<tr><td colspan="6">কোনো রিপোর্ট ডেটা নেই</td></tr>`;
-
+  // Staff Commission Report & Summary Report
+  if (!isStaff()) {
+    if ($('staffCommRows')) {
+      const sMap = {};
+      db.works.forEach(w => {
+        const key = w.staffName || 'অ্যাসাইন করা হয়নি';
+        if (!sMap[key]) sMap[key] = { name: key, count: 0, usd: 0, bill: 0, profit: 0, comm: 0 };
+        sMap[key].count++; sMap[key].usd += num(w.actualDollar); sMap[key].bill += bill(w);
+        sMap[key].profit += profit(w); sMap[key].comm += workCommission(w);
+      });
+      $('staffCommRows').innerHTML = Object.values(sMap).sort((a,b) => b.profit - a.profit).map(s => `<tr><td><strong>${esc(s.name)}</strong></td><td>${s.count} টি</td><td>${usd(s.usd)}</td><td>${money(s.bill)}</td><td class="${s.profit >= 0 ? 'good' : 'bad'}">${money(s.profit)}</td><td style="color:var(--brand);font-weight:700">${money(s.comm)}</td></tr>`).join('') || `<tr><td colspan="6">কোনো কাজের ডেটা নেই</td></tr>`;
+    }
+    if ($('reportRows')) $('reportRows').innerHTML = db.customers.map(c => {
+      const b = billed(c.id), p = paid(c.id), bal = p - b, cw = db.works.filter(w => w.customerId === c.id);
+      const totalUSD = cw.reduce((s, w) => s + num(w.actualDollar), 0), prCust = cw.reduce((s, w) => s + profit(w), 0);
+      const balHtml = bal < 0 ? `<span class="bad">বকেয়া: ${money(-bal)}</span>` : (bal > 0 ? `<span class="good">অ্যাডভান্স: ${money(bal)}</span>` : `৳0.00`);
+      return `<tr><td><strong>${esc(c.name)}</strong></td><td>${usd(totalUSD)}</td><td>${money(b)}</td><td>${money(p)}</td><td>${balHtml}</td><td class="${prCust >= 0 ? 'good' : 'bad'}">${money(prCust)}</td></tr>`;
+    }).join('') || `<tr><td colspan="6">কোনো রিপোর্ট ডেটা নেই</td></tr>`;
+  }
   renderDues();
 }
 
@@ -2270,24 +2094,17 @@ if ($('auRole')) $('auRole').onchange = () => { if ($('auPermsWrap')) $('auPerms
 if ($('euRole')) $('euRole').onchange = () => { if ($('euPermsWrap')) $('euPermsWrap').style.display = $('euRole').value === 'staff' ? 'block' : 'none'; };
 
 if ($('adminCreateUserForm')) $('adminCreateUserForm').onsubmit = e => {
-  e.preventDefault();
-  if (!isSuperAdmin()) return toast('শুধু Super Admin ইউজার তৈরি করতে পারবেন!', 'error');
-  const name = $('auName').value.trim(), username = $('auUsername').value.trim().toLowerCase();
-  const contact = $('auContact').value.trim(), pass = $('auPass').value, role = $('auRole').value;
+  e.preventDefault(); if (!isSuperAdmin()) return toast('শুধু Super Admin ইউজার তৈরি করতে পারবেন!', 'error');
+  const name = $('auName').value.trim(), username = $('auUsername').value.trim().toLowerCase(), contact = $('auContact').value.trim(), pass = $('auPass').value, role = $('auRole').value;
   if (!name || !username || pass.length < 6) return toast('সঠিক নাম, ইউজারনেম ও কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন!', 'error');
   if (username === 'admin') return toast('admin ইউজারনেম ব্যবহার করা যাবে না', 'error');
-
-  const accounts = readLocalAccounts();
-  if (accounts.some(a => a.username === username)) return toast('এই ইউজারনেম আগেই আছে!', 'error');
+  const accounts = readLocalAccounts(); if (accounts.some(a => a.username === username)) return toast('এই ইউজারনেম আগেই আছে!', 'error');
   const perms = role === 'staff' ? { canDelete: Boolean($('auPermDel')?.checked), canEdit: Boolean($('auPermEdit')?.checked), canPayments: Boolean($('auPermPay')?.checked), canExpenses: Boolean($('auPermExp')?.checked) } : null;
   const isEmail = contact.includes('@'), next = Number(localStorage.getItem(NEXTUSERIDKEY) || 2);
   const newAcc = { id: uid(), updatedAt: Date.now(), userNumber: next, name, username, email: isEmail ? contact.toLowerCase() : '', phone: isEmail ? '' : contact, password: hashPass(pass), role, perms, status: 'active', lastLogin: 'এখনো লগইন করেনি', loginCount: 0 };
-  accounts.push(newAcc);
-  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-  localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
+  accounts.push(newAcc); localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); localStorage.setItem(NEXTUSERIDKEY, String(next + 1));
   localStorage.setItem('ads_hisab_user_profile_v72_' + newAcc.id, JSON.stringify({ name, email: newAcc.email, phone: newAcc.phone, pic: '' }));
-  logActivity(`নতুন ${role} অ্যাকাউন্ট তৈরি: ${name} (@${username})`);
-  e.target.reset();
+  logActivity(`নতুন ${role} অ্যাকাউন্ট তৈরি: ${name}`); e.target.reset();
   if ($('auPermEdit')) $('auPermEdit').checked = true; if ($('auPermPay')) $('auPermPay').checked = true;
   if ($('auPermExp')) $('auPermExp').checked = true; if ($('auPermsWrap')) $('auPermsWrap').style.display = 'block';
   renderAdminPanel(); toast(`${name} (${role}) অ্যাকাউন্ট তৈরি হয়েছে!`);
@@ -2300,30 +2117,22 @@ window.openEditUserModal = function(userId) {
   $('euEmail').value = acc.email || ''; $('euPhone').value = acc.phone || '';
   $('euRole').value = acc.role || 'user'; $('euStatus').value = acc.status || 'active'; $('euNewPass').value = '';
   const p = { canDelete: false, canEdit: true, canPayments: true, canExpenses: true, ...(acc.perms || {}) };
-  $('euPermDel').checked = Boolean(p.canDelete); $('euPermEdit').checked = Boolean(p.canEdit);
-  $('euPermPay').checked = Boolean(p.canPayments); $('euPermExp').checked = Boolean(p.canExpenses);
-  $('euPermsWrap').style.display = $('euRole').value === 'staff' ? 'block' : 'none';
-  $('editUserModal').style.display = 'flex';
+  $('euPermDel').checked = Boolean(p.canDelete); $('euPermEdit').checked = Boolean(p.canEdit); $('euPermPay').checked = Boolean(p.canPayments); $('euPermExp').checked = Boolean(p.canExpenses);
+  $('euPermsWrap').style.display = $('euRole').value === 'staff' ? 'block' : 'none'; $('editUserModal').style.display = 'flex';
 };
-
 if ($('editUserForm')) $('editUserForm').onsubmit = e => {
-  e.preventDefault();
-  if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
-  const id = $('euId').value, accounts = readLocalAccounts(), idx = accounts.findIndex(a => a.id === id);
-  if (idx === -1) return;
+  e.preventDefault(); if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
+  const id = $('euId').value, accounts = readLocalAccounts(), idx = accounts.findIndex(a => a.id === id); if (idx === -1) return;
   const newU = $('euUsername').value.trim().toLowerCase();
-  if (newU === 'admin' || accounts.some(a => a.id !== id && a.username === newU)) return toast('এই ইউজারনেম ব্যবহার করা যাবে না বা আগেই নেওয়া হয়েছে!', 'error');
-  const np = $('euNewPass').value.trim();
-  if (np && np.length < 6) return toast('নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে!', 'error');
-
+  if (newU === 'admin' || accounts.some(a => a.id !== id && a.username === newU)) return toast('এই ইউজারনেম ব্যবহার করা যাবে না!', 'error');
+  const np = $('euNewPass').value.trim(); if (np && np.length < 6) return toast('নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে!', 'error');
   const role = $('euRole').value;
   accounts[idx].name = $('euName').value.trim(); accounts[idx].username = newU;
   accounts[idx].email = $('euEmail').value.trim().toLowerCase(); accounts[idx].phone = $('euPhone').value.trim();
   accounts[idx].role = role; accounts[idx].status = $('euStatus').value; accounts[idx].updatedAt = Date.now();
   if (np) accounts[idx].password = hashPass(np);
   if (role === 'staff') accounts[idx].perms = { canDelete: $('euPermDel').checked, canEdit: $('euPermEdit').checked, canPayments: $('euPermPay').checked, canExpenses: $('euPermExp').checked };
-  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-  logActivity(`ইউজার আপডেট: ${accounts[idx].name} (@${newU})`);
+  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); logActivity(`ইউজার আপডেট: ${accounts[idx].name}`);
   closeModal('editUserModal'); renderAdminPanel(); toast('ইউজারের তথ্য ও পারমিশন আপডেট হয়েছে!');
 };
 
@@ -2337,35 +2146,28 @@ window.impersonateUser = function(userId) {
   updateHeaderAndProfile(); goToSection('dash'); toast(`এখন ${acc.name}-এর ওয়ার্কস্পেস প্রিভিউ হচ্ছে`);
 };
 if ($('exitImpersonateBtn')) $('exitImpersonateBtn').onclick = () => {
-  if (!realSuperAdmin) return;
-  activeAccount = realSuperAdmin; realSuperAdmin = null;
+  if (!realSuperAdmin) return; activeAccount = realSuperAdmin; realSuperAdmin = null;
   if ($('impersonateBanner')) $('impersonateBanner').style.display = 'none';
-  applyPermissionClasses(); activateAccountData(activeAccount);
-  updateHeaderAndProfile(); goToSection('adminPanel'); toast('সুপার অ্যাডমিন ওয়ার্কস্পেসে ফিরে এসেছেন!');
+  applyPermissionClasses(); activateAccountData(activeAccount); updateHeaderAndProfile(); goToSection('adminPanel'); toast('সুপার অ্যাডমিন ওয়ার্কস্পেসে ফিরে এসেছেন!');
 };
 
 window.switchAdminSubTab = function(tabName) {
   if (!isSuperAdmin() && ['users', 'trash', 'cloud'].includes(tabName)) tabName = 'help';
   const map = { users: ['adminTabUsersBtn','adminUsersSubPanel'], help: ['adminTabHelpBtn','adminHelpSubPanel'], trash: ['adminTabTrashBtn','adminTrashSubPanel'], cloud: ['adminTabCloudBtn','adminCloudSubPanel'], logs: ['adminTabLogsBtn','adminLogsSubPanel'] };
-  Object.entries(map).forEach(([k, [btnId, panelId]]) => {
-    if ($(btnId)) $(btnId).classList.toggle('active', k === tabName);
-    if ($(panelId)) $(panelId).style.display = k === tabName ? 'block' : 'none';
-  });
+  Object.entries(map).forEach(([k, [btnId, panelId]]) => { if ($(btnId)) $(btnId).classList.toggle('active', k === tabName); if ($(panelId)) $(panelId).style.display = k === tabName ? 'block' : 'none'; });
   renderAdminPanel();
 };
 window.toggleUserStatus = function(userId) {
   if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   const accounts = readLocalAccounts(), acc = accounts.find(a => a.id === userId); if (!acc) return;
   acc.status = acc.status === 'suspended' ? 'active' : 'suspended'; acc.updatedAt = Date.now();
-  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts));
-  logActivity(`স্ট্যাটাস পরিবর্তন: ${acc.name} -> ${acc.status}`);
+  localStorage.setItem(ACCOUNTSKEY, JSON.stringify(accounts)); logActivity(`স্ট্যাটাস পরিবর্তন: ${acc.name} -> ${acc.status}`);
   toast(`${acc.name} এখন ${acc.status === 'suspended' ? 'ব্লকড' : 'সচল'}`); renderAdminPanel();
 };
 window.deleteAccount = function(userId) {
   if (!isSuperAdmin() || !confirm('এই ইউজারের অ্যাকাউন্ট ও সমস্ত ডেটা স্থায়ীভাবে ডিলিট করতে চান?')) return;
   localStorage.setItem(ACCOUNTSKEY, JSON.stringify(readLocalAccounts().filter(a => a.id !== userId)));
-  localStorage.removeItem('ads_hisab_user_data_v72_' + userId);
-  localStorage.removeItem('ads_hisab_user_profile_v72_' + userId);
+  localStorage.removeItem('ads_hisab_user_data_v72_' + userId); localStorage.removeItem('ads_hisab_user_profile_v72_' + userId);
   logActivity(`অ্যাকাউন্ট ডিলিট: ${userId}`); toast('অ্যাকাউন্ট ডিলিট হয়েছে!', 'warn'); renderAdminPanel();
 };
 
@@ -2376,93 +2178,61 @@ function renderAdminPanel() {
     if ($('saAdmins')) $('saAdmins').textContent = 1 + accounts.filter(a => a.role === 'admin' || a.role === 'staff').length;
     if ($('saUsers')) $('saUsers').textContent = accounts.filter(a => a.role === 'user').length;
     if ($('saSuspended')) $('saSuspended').textContent = accounts.filter(a => a.status === 'suspended').length;
-
     if ($('saUserRows')) {
       const adminP = readProfile(), saMeta = readSuperAdminMeta();
       $('saUserRows').innerHTML = `<tr><td>AS-00001</td><td><strong>${esc(adminP.name || 'Super Admin')}</strong> <small class="muted">(@admin)</small></td><td>${esc(adminP.email || 'admin@example.com')}<br><small class="muted">${esc(adminP.phone || '01700000000')}</small></td><td><span class="badge-success">Super Admin</span></td><td><small>${esc(saMeta.lastLogin || 'সক্রিয়')}<br>লগইন: ${num(saMeta.loginCount)} বার</small></td><td><span class="badge-success">Active</span></td><td>—</td></tr>` +
         accounts.map(a => {
           const rBadge = a.role === 'admin' ? '<span class="badge-admin">Admin</span>' : (a.role === 'staff' ? '<span class="badge-status status-running">Staff</span>' : '<span class="badge-success">User</span>');
           let wsStats = '<small class="muted">শেয়ার্ড ওয়ার্কস্পেস</small>';
-          if (a.role !== 'staff') {
-            try { const udb = normalizeDb(JSON.parse(localStorage.getItem('ads_hisab_user_data_v72_' + a.id) || '{}')); wsStats = `<small class="muted">কাস্টমার: ${udb.customers.length} · কাজ: ${udb.works.length}</small>`; } catch (e) {}
-          } else {
-            const p = { canDelete: false, canEdit: true, canPayments: true, canExpenses: true, ...(a.perms || {}) };
-            wsStats = `<small class="muted">${p.canDelete ? 'Del✓' : 'Del✕'} ${p.canEdit ? 'Edit✓' : 'Edit✕'} ${p.canPayments ? 'Pay✓' : 'Pay✕'}</small>`;
-          }
-          const previewBtn = (a.role !== 'staff') ? `<button type="button" class="secondary sm" onclick="impersonateUser('${a.id}')" title="ড্যাশবোর্ড দেখুন">👁️</button>` : '';
-          return `<tr>
-            <td>AS-${String(a.userNumber || 2).padStart(5, '0')}</td>
-            <td><strong>${esc(a.name)}</strong><br><small class="muted">@${esc(a.username)}</small></td>
-            <td>${esc(a.email || '—')}<br><small class="muted">${esc(a.phone || '—')}</small></td>
-            <td>${rBadge}<br>${wsStats}</td>
-            <td><small>${esc(a.lastLogin || 'কখনো না')}<br>মোট: ${num(a.loginCount)} বার</small></td>
-            <td>${a.status === 'suspended' ? '<span class="badge-danger">Suspended</span>' : '<span class="badge-success">Active</span>'}</td>
-            <td>${previewBtn}<button type="button" class="secondary sm" onclick="openEditUserModal('${a.id}')">✏️ এডিট</button><button type="button" class="warn sm" onclick="toggleUserStatus('${a.id}')">${a.status === 'suspended' ? 'আনব্লক' : 'ব্লক'}</button><button type="button" class="danger sm" onclick="deleteAccount('${a.id}')">ডিলিট</button></td>
-          </tr>`;
+          if (a.role !== 'staff') { try { const udb = normalizeDb(JSON.parse(localStorage.getItem('ads_hisab_user_data_v72_' + a.id) || '{}')); wsStats = `<small class="muted">কাস্টমার: ${udb.customers.length} · কাজ: ${udb.works.length}</small>`; } catch (e) {} }
+          else { const p = { canDelete: false, canEdit: true, canPayments: true, canExpenses: true, ...(a.perms || {}) }; wsStats = `<small class="muted">${p.canDelete ? 'Del✓' : 'Del✕'} ${p.canEdit ? 'Edit✓' : 'Edit✕'} ${p.canPayments ? 'Pay✓' : 'Pay✕'}</small>`; }
+          const previewBtn = (a.role !== 'staff') ? `<button type="button" class="secondary sm" onclick="impersonateUser('${a.id}')">👁️</button>` : '';
+          return `<tr><td>AS-${String(a.userNumber || 2).padStart(5, '0')}</td><td><strong>${esc(a.name)}</strong><br><small class="muted">@${esc(a.username)}</small></td><td>${esc(a.email || '—')}<br><small class="muted">${esc(a.phone || '—')}</small></td><td>${rBadge}<br>${wsStats}</td><td><small>${esc(a.lastLogin || 'কখনো না')}<br>মোট: ${num(a.loginCount)} বার</small></td><td>${a.status === 'suspended' ? '<span class="badge-danger">Suspended</span>' : '<span class="badge-success">Active</span>'}</td><td>${previewBtn}<button type="button" class="secondary sm" onclick="openEditUserModal('${a.id}')">✏️ এডিট</button><button type="button" class="warn sm" onclick="toggleUserStatus('${a.id}')">${a.status === 'suspended' ? 'আনব্লক' : 'ব্লক'}</button><button type="button" class="danger sm" onclick="deleteAccount('${a.id}')">ডিলিট</button></td></tr>`;
         }).join('');
     }
-
-    if ($('trashRows')) $('trashRows').innerHTML = (db.trash || []).map(t => `
-      <tr><td><span class="badge-status status-running">${esc(t.type)}</span></td><td><strong>${esc(t.label)}</strong></td>
-        <td><small>${esc(t.deletedAt)}<br>ডিলিটকারী: ${esc(t.deletedBy)}</small></td>
-        <td><button type="button" class="secondary sm" onclick="restoreTrash('${t.id}')">♻️ রিস্টোর</button><button type="button" class="danger sm" onclick="permDeleteTrash('${t.id}')">স্থায়ী ডিলিট</button></td></tr>`).join('') || `<tr><td colspan="4">রিসাইকেল বিন খালি 🎉</td></tr>`;
-
+    if ($('trashRows')) $('trashRows').innerHTML = (db.trash || []).map(t => `<tr><td><span class="badge-status status-running">${esc(t.type)}</span></td><td><strong>${esc(t.label)}</strong></td><td><small>${esc(t.deletedAt)}<br>ডিলিটকারী: ${esc(t.deletedBy)}</small></td><td><button type="button" class="secondary sm" onclick="restoreTrash('${t.id}')">♻️ রিস্টোর</button><button type="button" class="danger sm" onclick="permDeleteTrash('${t.id}')">স্থায়ী ডিলিট</button></td></tr>`).join('') || `<tr><td colspan="4">রিসাইকেল বিন খালি 🎉</td></tr>`;
     const sc = readCloudSync();
     if ($('csUrl') && document.activeElement !== $('csUrl')) $('csUrl').value = sc.url || '';
     if ($('csSecret') && document.activeElement !== $('csSecret')) $('csSecret').value = sc.secret || '';
     if ($('csAutoSync')) $('csAutoSync').checked = Boolean(sc.autoSync);
     if ($('csLastSyncText')) $('csLastSyncText').textContent = sc.lastSync ? `সর্বশেষ সিঙ্ক: ${sc.lastSync}` : '';
   }
-
-  const helps = readHelpRequests().filter(h => isSuperAdmin() || h.target !== 'Super Admin');
-  const openCount = helps.filter(h => h.status === 'open').length;
+  const helps = readHelpRequests().filter(h => isSuperAdmin() || h.target !== 'Super Admin'), openCount = helps.filter(h => h.status === 'open').length;
   if ($('helpOpenBadge')) { $('helpOpenBadge').style.display = openCount ? 'inline-block' : 'none'; $('helpOpenBadge').textContent = openCount; }
   if ($('helpReqRows')) $('helpReqRows').innerHTML = helps.map(h => {
-    const wa = normalizeBdPhone(h.contact);
-    const waBtn = wa.length >= 11 ? `<a href="https://wa.me/${wa}" target="_blank" style="text-decoration:none"><button type="button" class="secondary sm">📲</button></a>` : '';
-    return `<tr><td><small>${esc(h.time)}</small></td><td><span class="badge-admin">${esc(h.target)}</span><br><strong>${esc(h.topic)}</strong></td>
-      <td><strong>${esc(h.name)}</strong><br><small class="muted">${esc(h.contact)}</small></td>
-      <td style="max-width:260px;white-space:normal">${esc(h.message)}</td>
-      <td>${h.status === 'resolved' ? '<span class="badge-success">সমাধান</span>' : '<span class="badge-danger">অপেক্ষমাণ</span>'}</td>
-      <td>${waBtn}<button type="button" class="secondary sm" onclick="resolveHelpReq('${h.id}')">${h.status === 'resolved' ? 'Reopen' : '✓ সমাধান'}</button><button type="button" class="danger sm" onclick="deleteHelpReq('${h.id}')">মুছুন</button></td></tr>`;
+    const wa = normalizeBdPhone(h.contact), waBtn = wa.length >= 11 ? `<a href="https://wa.me/${wa}" target="_blank" style="text-decoration:none"><button type="button" class="secondary sm">📲</button></a>` : '';
+    return `<tr><td><small>${esc(h.time)}</small></td><td><span class="badge-admin">${esc(h.target)}</span><br><strong>${esc(h.topic)}</strong></td><td><strong>${esc(h.name)}</strong><br><small class="muted">${esc(h.contact)}</small></td><td style="max-width:260px;white-space:normal">${esc(h.message)}</td><td>${h.status === 'resolved' ? '<span class="badge-success">সমাধান</span>' : '<span class="badge-danger">অপেক্ষমাণ</span>'}</td><td>${waBtn}<button type="button" class="secondary sm" onclick="resolveHelpReq('${h.id}')">${h.status === 'resolved' ? 'Reopen' : '✓ সমাধান'}</button><button type="button" class="danger sm" onclick="deleteHelpReq('${h.id}')">মুছুন</button></td></tr>`;
   }).join('') || `<tr><td colspan="6">কোনো হেল্প মেসেজ আসেনি</td></tr>`;
-
   if ($('activityLogRows')) $('activityLogRows').innerHTML = db.activityLogs.map(l => `<tr><td>${esc(l.time)}</td><td>${esc(l.text)}</td></tr>`).join('') || `<tr><td colspan="2">কোনো লগ নেই</td></tr>`;
 }
 
-// Conflict-Free Master Merge Engine & Cloud Sync
+// Conflict-Free Master Merge Engine & Cloud Sync + 30s Real-time Background Pull
 function mergeArrayById(arrA, arrB, deletedMap) {
   const map = new Map();
   const put = item => {
     if (!item || !item.id) return;
-    const delTs = num(deletedMap[item.id]);
-    const itemTs = num(item.updatedAt);
+    const delTs = num(deletedMap[item.id]), itemTs = num(item.updatedAt);
     if (delTs > 0 && delTs >= itemTs) return;
     const prev = map.get(item.id);
     if (!prev || itemTs >= num(prev.updatedAt)) map.set(item.id, item);
   };
-  (arrA || []).forEach(put);
-  (arrB || []).forEach(put);
+  (arrA || []).forEach(put); (arrB || []).forEach(put);
   return Array.from(map.values());
 }
 
 function mergeDbObjects(localRaw, remoteRaw) {
-  const L = normalizeDb(localRaw), R = normalizeDb(remoteRaw);
-  const deletedIds = { ...L.deletedIds };
+  const L = normalizeDb(localRaw), R = normalizeDb(remoteRaw), deletedIds = { ...L.deletedIds };
   Object.entries(R.deletedIds).forEach(([k, v]) => { deletedIds[k] = Math.max(num(deletedIds[k]), num(v)); });
-
   const collections = ['rates','customers','pages','works','payments','cardDeposits','cardTransfers','cardRefunds','adAccounts','cashAdjustments','cards','expenses','trash'];
   const merged = blank();
   merged.updatedAt = Math.max(L.updatedAt, R.updatedAt);
   merged.deletedIds = deletedIds;
+  merged.wallets = [...new Set([...(L.wallets || []), ...(R.wallets || [])])];
   collections.forEach(c => { merged[c] = mergeArrayById(L[c], R[c], deletedIds); });
   merged.reminderLogs = { ...R.reminderLogs, ...L.reminderLogs };
   merged.agency = L.updatedAt >= R.updatedAt ? L.agency : R.agency;
-
   const logSeen = new Set();
-  merged.activityLogs = [...L.activityLogs, ...R.activityLogs].filter(l => {
-    const k = `${l.time}|${l.text}`; if (logSeen.has(k)) return false; logSeen.add(k); return true;
-  }).slice(0, 150);
+  merged.activityLogs = [...L.activityLogs, ...R.activityLogs].filter(l => { const k = `${l.time}|${l.text}`; if (logSeen.has(k)) return false; logSeen.add(k); return true; }).slice(0, 150);
   return merged;
 }
 
@@ -2471,53 +2241,39 @@ function mergeMasterSnapshots(localSnap, remoteSnap) {
   const accMap = new Map();
   [...(remoteSnap.accounts || []), ...(localSnap.accounts || [])].forEach(a => {
     if (!a || !a.id) return;
-    const prev = accMap.get(a.id);
-    if (!prev || num(a.updatedAt) >= num(prev.updatedAt)) accMap.set(a.id, a);
+    const prev = accMap.get(a.id); if (!prev || num(a.updatedAt) >= num(prev.updatedAt)) accMap.set(a.id, a);
   });
-  const mergedUserDbs = {};
-  const allUserIds = new Set([...Object.keys(localSnap.userDbs || {}), ...Object.keys(remoteSnap.userDbs || {})]);
+  const mergedUserDbs = {}, allUserIds = new Set([...Object.keys(localSnap.userDbs || {}), ...Object.keys(remoteSnap.userDbs || {})]);
   allUserIds.forEach(id => {
     if (localSnap.userDbs?.[id] && remoteSnap.userDbs?.[id]) mergedUserDbs[id] = mergeDbObjects(localSnap.userDbs[id], remoteSnap.userDbs[id]);
     else mergedUserDbs[id] = normalizeDb(localSnap.userDbs?.[id] || remoteSnap.userDbs?.[id]);
   });
   const helpMap = new Map();
   [...(remoteSnap.helpRequests || []), ...(localSnap.helpRequests || [])].forEach(h => { if (h?.id) helpMap.set(h.id, h); });
-
   return {
-    type: 'ads_hisab_master_backup_v72',
-    snapshotTs: Date.now(),
-    exportedAt: new Date().toISOString(),
-    accounts: Array.from(accMap.values()),
-    nextUserId: String(Math.max(num(localSnap.nextUserId), num(remoteSnap.nextUserId)) || 2),
+    type: 'ads_hisab_master_backup_v72', snapshotTs: Date.now(), exportedAt: new Date().toISOString(),
+    accounts: Array.from(accMap.values()), nextUserId: String(Math.max(num(localSnap.nextUserId), num(remoteSnap.nextUserId)) || 2),
     superAdminPass: num(remoteSnap.snapshotTs) > num(localSnap.snapshotTs) ? (remoteSnap.superAdminPass || localSnap.superAdminPass) : localSnap.superAdminPass,
     superAdminMeta: num(remoteSnap.snapshotTs) > num(localSnap.snapshotTs) ? (remoteSnap.superAdminMeta || localSnap.superAdminMeta) : localSnap.superAdminMeta,
     masterDb: mergeDbObjects(localSnap.masterDb, remoteSnap.masterDb),
     masterProfile: (localSnap.masterProfile && Object.keys(localSnap.masterProfile).length) ? localSnap.masterProfile : (remoteSnap.masterProfile || {}),
-    userDbs: mergedUserDbs,
-    userProfiles: { ...(remoteSnap.userProfiles || {}), ...(localSnap.userProfiles || {}) },
+    userDbs: mergedUserDbs, userProfiles: { ...(remoteSnap.userProfiles || {}), ...(localSnap.userProfiles || {}) },
     helpRequests: Array.from(helpMap.values()).slice(0, 100)
   };
 }
 
 function buildMasterSnapshot() {
-  const accounts = readLocalAccounts();
-  const userDbs = {}, userProfiles = {};
+  const accounts = readLocalAccounts(), userDbs = {}, userProfiles = {};
   accounts.forEach(a => {
     try { const rawD = localStorage.getItem('ads_hisab_user_data_v72_' + a.id); if (rawD) userDbs[a.id] = JSON.parse(rawD); } catch (e) {}
     try { const rawP = localStorage.getItem('ads_hisab_user_profile_v72_' + a.id); if (rawP) userProfiles[a.id] = JSON.parse(rawP); } catch (e) {}
   });
   return {
-    type: 'ads_hisab_master_backup_v72',
-    snapshotTs: Date.now(),
-    exportedAt: new Date().toISOString(),
-    accounts,
-    nextUserId: localStorage.getItem(NEXTUSERIDKEY) || '2',
-    superAdminPass: localStorage.getItem(PASSKEY) || hashPass('123456789'),
-    superAdminMeta: readSuperAdminMeta(),
-    masterDb: normalizeDb(JSON.parse(localStorage.getItem(MASTER_DB_KEY) || '{}')),
+    type: 'ads_hisab_master_backup_v72', snapshotTs: Date.now(), exportedAt: new Date().toISOString(),
+    accounts, nextUserId: localStorage.getItem(NEXTUSERIDKEY) || '2', superAdminPass: localStorage.getItem(PASSKEY) || hashPass('123456789'),
+    superAdminMeta: readSuperAdminMeta(), masterDb: normalizeDb(JSON.parse(localStorage.getItem(MASTER_DB_KEY) || '{}')),
     masterProfile: (() => { try { return JSON.parse(localStorage.getItem('ads_hisab_user_profile_v72_legacy-super-admin') || '{}'); } catch (e) { return {}; } })(),
-    userDbs, userProfiles,
-    helpRequests: readHelpRequests()
+    userDbs, userProfiles, helpRequests: readHelpRequests()
   };
 }
 
@@ -2546,11 +2302,7 @@ if ($('masterRestoreFile')) $('masterRestoreFile').onchange = e => {
   if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   const file = e.target.files?.[0]; if (!file) return;
   const reader = new FileReader();
-  reader.onload = evt => {
-    try { applyMasterSnapshot(JSON.parse(evt.target.result)); toast('মাস্টার ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!'); }
-    catch (err) { toast('সঠিক মাস্টার ব্যাকআপ ফাইল নয়!', 'error'); }
-    e.target.value = '';
-  };
+  reader.onload = evt => { try { applyMasterSnapshot(JSON.parse(evt.target.result)); toast('মাস্টার ব্যাকআপ রিস্টোর হয়েছে!'); } catch (err) { toast('সঠিক মাস্টার ব্যাকআপ ফাইল নয়!', 'error'); } e.target.value = ''; };
   reader.readAsText(file);
 };
 
@@ -2569,14 +2321,12 @@ function buildCloudEndpoint(url, secret) {
 }
 
 async function pushToCloud(silent = false) {
-  const cfg = readCloudSync();
-  const endpoint = buildCloudEndpoint(cfg.url, cfg.secret);
+  const cfg = readCloudSync(), endpoint = buildCloudEndpoint(cfg.url, cfg.secret);
   if (!endpoint) { if (!silent) toast('প্রথমে Firebase Database URL সেভ করুন!', 'error'); return; }
   setSyncUi('busy', 'Syncing...');
   try {
     let snapToPush = buildMasterSnapshot();
     const lastKnownTs = num(localStorage.getItem(LAST_CLOUD_TS_KEY));
-    // Fetch remote first to merge if another device updated concurrently
     try {
       const checkRes = await fetch(endpoint);
       if (checkRes.ok) {
@@ -2587,13 +2337,11 @@ async function pushToCloud(silent = false) {
         }
       }
     } catch (e) {}
-
     const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(snapToPush) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     localStorage.setItem(LAST_CLOUD_TS_KEY, String(snapToPush.snapshotTs));
     localStorage.removeItem(LOCAL_DIRTY_KEY);
-    cfg.lastSync = new Date().toLocaleString('bn-BD');
-    writeCloudSync(cfg);
+    cfg.lastSync = new Date().toLocaleString('bn-BD'); writeCloudSync(cfg);
     if ($('csLastSyncText')) $('csLastSyncText').textContent = `সর্বশেষ সিঙ্ক: ${cfg.lastSync}`;
     setSyncUi('ok', 'Synced');
     if (!silent) toast('ক্লাউডে স্মার্ট মার্জ ও সেভ হয়েছে!');
@@ -2604,23 +2352,18 @@ async function pushToCloud(silent = false) {
 }
 
 async function pullFromCloud(silent = false, customUrl = '', customSecret = '') {
-  const cfg = readCloudSync();
-  const url = customUrl || cfg.url, secret = customSecret !== '' ? customSecret : cfg.secret;
+  const cfg = readCloudSync(), url = customUrl || cfg.url, secret = customSecret !== '' ? customSecret : cfg.secret;
   const endpoint = buildCloudEndpoint(url, secret);
   if (!endpoint) { if (!silent) toast('Firebase Database URL দিন!', 'error'); return false; }
-  setSyncUi('busy', 'Pulling...');
+  if (!silent) setSyncUi('busy', 'Pulling...');
   try {
-    const res = await fetch(endpoint);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const res = await fetch(endpoint); if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (!data || data.type !== 'ads_hisab_master_backup_v72') {
-      setSyncUi('ok', 'Connected');
-      if (!silent) toast('ক্লাউডে এখনো কোনো ভ্যালিড ব্যাকআপ ডেটা পাওয়া যায়নি!', 'warn');
-      return false;
-    }
+    if (!data || data.type !== 'ads_hisab_master_backup_v72') { setSyncUi('ok', 'Connected'); if (!silent) toast('ক্লাউডে এখনো কোনো ভ্যালিড ব্যাকআপ ডেটা নেই!', 'warn'); return false; }
+    const lastKnownTs = num(localStorage.getItem(LAST_CLOUD_TS_KEY));
+    if (silent && num(data.snapshotTs) <= lastKnownTs) { setSyncUi('ok', 'Synced'); return false; }
     const isDirty = localStorage.getItem(LOCAL_DIRTY_KEY) === '1';
-    const localSnap = buildMasterSnapshot();
-    const finalSnap = isDirty ? mergeMasterSnapshots(localSnap, data) : data;
+    const finalSnap = isDirty ? mergeMasterSnapshots(buildMasterSnapshot(), data) : data;
     applyMasterSnapshot(finalSnap);
     writeCloudSync({ ...cfg, url, secret, lastSync: new Date().toLocaleString('bn-BD') });
     if (isDirty) {
@@ -2632,14 +2375,22 @@ async function pullFromCloud(silent = false, customUrl = '', customSecret = '') 
     return true;
   } catch (err) {
     setSyncUi('err', 'Offline');
-    if (!silent) toast('ক্লাউড থেকে আনতে সমস্যা হয়েছে! ইন্টারনেট ও URL যাচাই করুন।', 'error');
+    if (!silent) toast('ক্লাউড থেকে আনতে সমস্যা হয়েছে!', 'error');
     return false;
   }
 }
 
+// 30-second real-time background sync check
+setInterval(() => {
+  if (!activeAccount || !navigator.onLine) return;
+  const cfg = readCloudSync();
+  if (cfg.autoSync && cfg.url && localStorage.getItem(LOCAL_DIRTY_KEY) !== '1') {
+    pullFromCloud(true, cfg.url, cfg.secret || '');
+  }
+}, 30000);
+
 if ($('cloudSyncForm')) $('cloudSyncForm').onsubmit = e => {
-  e.preventDefault();
-  if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
+  e.preventDefault(); if (!isSuperAdmin()) return toast('অনুমতি নেই!', 'error');
   const cfg = readCloudSync();
   writeCloudSync({ ...cfg, url: $('csUrl').value.trim(), secret: $('csSecret').value.trim(), autoSync: $('csAutoSync').checked });
   toast('ক্লাউড সিঙ্ক সেটিংস সেভ হয়েছে!');
@@ -2649,67 +2400,48 @@ if ($('csPullBtn')) $('csPullBtn').onclick = () => { if (isSuperAdmin() && confi
 
 // Export CSV & Backup
 function downloadBlob(content, filename, mime) {
-  const blob = new Blob([content], { type: mime }), url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
+  const blob = new Blob([content], { type: mime }), url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
 if ($('exportCsvBtn')) $('exportCsvBtn').onclick = () => {
   const rows = [['Customer','Phone','USD Spent','Bill (BDT)','Paid (BDT)','Due (BDT)','Advance (BDT)','Net Profit (BDT)']];
-  db.customers.forEach(c => {
-    const b = billed(c.id), p = paid(c.id), bal = p - b, cw = db.works.filter(w => w.customerId === c.id);
-    rows.push([c.name, c.phone || '', cw.reduce((s,w)=>s+num(w.actualDollar),0).toFixed(2), b.toFixed(2), p.toFixed(2), Math.max(0,-bal).toFixed(2), Math.max(0,bal).toFixed(2), cw.reduce((s,w)=>s+profit(w),0).toFixed(2)]);
-  });
+  db.customers.forEach(c => { const b = billed(c.id), p = paid(c.id), bal = p - b, cw = db.works.filter(w => w.customerId === c.id); rows.push([c.name, c.phone || '', cw.reduce((s,w)=>s+num(w.actualDollar),0).toFixed(2), b.toFixed(2), p.toFixed(2), Math.max(0,-bal).toFixed(2), Math.max(0,bal).toFixed(2), cw.reduce((s,w)=>s+profit(w),0).toFixed(2)]); });
   downloadBlob('\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\n'), `ads_hisab_customers_${today()}.csv`, 'text/csv;charset=utf-8;');
   toast('কাস্টমার সামারি CSV ডাউনলোড হয়েছে!');
 };
 if ($('exportWorksCsvBtn')) $('exportWorksCsvBtn').onclick = () => {
-  const rows = [['Date','Customer','Page','Campaign','Budget USD','Actual USD','Bill Rate','Service Fee','Bill BDT','Buy Rate','Fee %','Total Cost BDT','Profit BDT','Status']];
-  db.works.forEach(w => {
-    rows.push([w.date, cname(w.customerId), pname(w.pageId), w.name, num(w.dollar), num(w.actualDollar), num(w.rate), workServiceCharge(w).toFixed(2), bill(w).toFixed(2), num(w.actualRate), num(w.feePct), actual(w).toFixed(2), profit(w).toFixed(2), w.status]);
-  });
+  const rows = [['Date','Customer','Page','Campaign','Staff','Budget USD','Actual USD','Bill Rate','Service Fee','Bill BDT','Buy Rate','Fee %','Total Cost BDT','Profit BDT','Commission','Status']];
+  db.works.forEach(w => { rows.push([w.date, cname(w.customerId), pname(w.pageId), w.name, w.staffName || '', num(w.dollar), num(w.actualDollar), num(w.rate), workServiceCharge(w).toFixed(2), bill(w).toFixed(2), num(w.actualRate), num(w.feePct), actual(w).toFixed(2), profit(w).toFixed(2), workCommission(w).toFixed(2), w.status]); });
   downloadBlob('\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\n'), `ads_hisab_works_${today()}.csv`, 'text/csv;charset=utf-8;');
   toast('কাজের বিস্তারিত CSV ডাউনলোড হয়েছে!');
 };
-if ($('backupBtn')) $('backupBtn').onclick = () => {
-  downloadBlob(JSON.stringify(db, null, 2), `ads_hisab_backup_${today()}.json`, 'application/json');
-  localStorage.setItem(LAST_BACKUP_KEY, today()); checkBackupReminder(); toast('JSON ব্যাকআপ ডাউনলোড হয়েছে!');
-};
+if ($('backupBtn')) $('backupBtn').onclick = () => { downloadBlob(JSON.stringify(db, null, 2), `ads_hisab_backup_${today()}.json`, 'application/json'); localStorage.setItem(LAST_BACKUP_KEY, today()); checkBackupReminder(); toast('JSON ব্যাকআপ ডাউনলোড হয়েছে!'); };
 if ($('restoreFile')) $('restoreFile').onchange = e => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
     try {
       const parsed = JSON.parse(evt.target.result);
-      if (parsed && parsed.type === 'ads_hisab_master_backup_v72') {
-        if (!isSuperAdmin()) return toast('মাস্টার ব্যাকআপ শুধু Super Admin রিস্টোর করতে পারবেন!', 'error');
-        applyMasterSnapshot(parsed); toast('মাস্টার ব্যাকআপ রিস্টোর হয়েছে!');
-      } else { db = normalizeDb(parsed); save(); applyAgencyBranding(); toast('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!'); }
+      if (parsed && parsed.type === 'ads_hisab_master_backup_v72') { if (!isSuperAdmin()) return toast('মাস্টার ব্যাকআপ শুধু Super Admin রিস্টোর করতে পারবেন!', 'error'); applyMasterSnapshot(parsed); toast('মাস্টার ব্যাকআপ রিস্টোর হয়েছে!'); }
+      else { db = normalizeDb(parsed); save(); applyAgencyBranding(); toast('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!'); }
     } catch (err) { toast('ফাইল ফরম্যাট সঠিক নয়!', 'error'); }
     e.target.value = '';
   };
   reader.readAsText(file);
 };
-if ($('wipeBtn')) $('wipeBtn').onclick = () => {
-  if (confirm('সতর্কতা: বর্তমান অ্যাকাউন্টের সকল ডেটা মুছে ফেলা হবে! আপনি কি নিশ্চিত?')) { db = blank(); save(); applyAgencyBranding(); toast('সকল ডেটা মুছে ফেলা হয়েছে', 'warn'); }
-};
+if ($('wipeBtn')) $('wipeBtn').onclick = () => { if (confirm('সতর্কতা: বর্তমান অ্যাকাউন্টের সকল ডেটা মুছে ফেলা হবে!')) { db = blank(); save(); applyAgencyBranding(); toast('সকল ডেটা মুছে ফেলা হয়েছে', 'warn'); } };
 if ($('printBtn')) $('printBtn').onclick = () => window.print();
 
 // Online + Local Team Chat
 let refreshOnlineChat = () => {};
 (function initOnlineChat() {
-  const key = 'ads_manager_local_chat_v72';
-  const list = $('chatMessages'), form = $('chatForm'), input = $('chatInput'), clearBtn = $('clearChatBtn');
+  const key = 'ads_manager_local_chat_v72', list = $('chatMessages'), form = $('chatForm'), input = $('chatInput'), clearBtn = $('clearChatBtn');
   if (!list || !form || !input) return;
-
-  const getChatEndpoint = () => {
-    const cfg = readCloudSync(), clean = String(cfg.url || '').trim().replace(/\/+$/, '');
-    return clean ? `${clean}/ads_hisab_chat_v72.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '') : '';
-  };
-  let messages = [];
-  try { messages = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { messages = []; }
+  const getChatEndpoint = () => { const cfg = readCloudSync(), clean = String(cfg.url || '').trim().replace(/\/+$/, ''); return clean ? `${clean}/ads_hisab_chat_v72.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '') : ''; };
+  let messages = []; try { messages = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { messages = []; }
 
   const draw = () => {
     const ep = getChatEndpoint();
@@ -2719,62 +2451,45 @@ let refreshOnlineChat = () => {};
       messages.map(m => `<div class="chat-msg ${(!m.username || m.username === me) ? 'mine' : ''}">${esc(m.text)}<small>${m.sender ? `${esc(m.sender)} (${esc(m.role || 'user')}) · ` : ''}${esc(m.time)}</small></div>`).join('');
     list.scrollTop = list.scrollHeight;
   };
-
   refreshOnlineChat = async () => {
     const ep = getChatEndpoint(); if (!ep) { draw(); return; }
     try {
-      const res = await fetch(ep); if (!res.ok) return;
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        messages = Object.values(data).filter(x => x && x.text).sort((a, b) => (a.ts || 0) - (b.ts || 0)).slice(-120);
-        try { localStorage.setItem(key, JSON.stringify(messages)); } catch (e) {}
-      } else if (data === null) { messages = []; localStorage.setItem(key, '[]'); }
+      const res = await fetch(ep); if (!res.ok) return; const data = await res.json();
+      if (data && typeof data === 'object') { messages = Object.values(data).filter(x => x && x.text).sort((a, b) => (a.ts || 0) - (b.ts || 0)).slice(-120); try { localStorage.setItem(key, JSON.stringify(messages)); } catch (e) {} }
+      else if (data === null) { messages = []; localStorage.setItem(key, '[]'); }
       draw();
     } catch (e) { draw(); }
   };
-
   draw();
   if ($('chatRefreshBtn')) $('chatRefreshBtn').onclick = () => { refreshOnlineChat(); toast('চ্যাট রিফ্রেশ হয়েছে!'); };
   setInterval(() => { if (activeAccount && $('liveChat')?.classList.contains('active')) refreshOnlineChat(); }, 5000);
-
   form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const value = input.value.trim(); if (!value) return;
+    e.preventDefault(); const value = input.value.trim(); if (!value) return;
     const msgObj = { id: uid(), sender: activeAccount?.name || 'User', role: activeAccount?.role || 'user', username: activeAccount?.username || '', text: value, time: new Date().toLocaleString('bn-BD'), ts: Date.now() };
-    messages.push(msgObj);
-    try { localStorage.setItem(key, JSON.stringify(messages)); } catch (err) {}
-    input.value = ''; draw();
-    const ep = getChatEndpoint();
+    messages.push(msgObj); try { localStorage.setItem(key, JSON.stringify(messages)); } catch (err) {}
+    input.value = ''; draw(); const ep = getChatEndpoint();
     if (ep) { try { await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(msgObj) }); } catch (err) {} }
   });
-
   if (clearBtn) clearBtn.onclick = async () => {
-    if (!isSuperAdmin()) return toast('শুধু Super Admin চ্যাট মুছতে পারবেন!', 'error');
-    if (!confirm('সব চ্যাট/নোট মুছে ফেলতে চান?')) return;
-    messages = []; localStorage.setItem(key, '[]');
-    const ep = getChatEndpoint();
+    if (!isSuperAdmin() || !confirm('সব চ্যাট/নোট মুছে ফেলতে চান?')) return;
+    messages = []; localStorage.setItem(key, '[]'); const ep = getChatEndpoint();
     if (ep) { try { await fetch(ep, { method: 'DELETE' }); } catch (err) {} }
     draw(); toast('চ্যাট পরিষ্কার হয়েছে', 'warn');
   };
 })();
 
-// Read-Only Client Portal Renderer (?portal=ID_TOKEN)
+// Read-Only Client Portal (?portal=ID_TOKEN)
 async function checkAndRenderPortal() {
-  const params = new URLSearchParams(location.search);
-  const portalKey = params.get('portal');
+  const portalKey = new URLSearchParams(location.search).get('portal');
   if (!portalKey) return false;
   if ($('authOverlay')) $('authOverlay').style.display = 'none';
   if ($('clientPortalOverlay')) $('clientPortalOverlay').style.display = 'flex';
-  const cfg = readCloudSync();
-  const clean = String(cfg.url || DEFAULT_CLOUD_URL || '').trim().replace(/\/+$/, '');
+  const cfg = readCloudSync(), clean = String(cfg.url || DEFAULT_CLOUD_URL || '').trim().replace(/\/+$/, '');
   const endpoint = `${clean}/ads_hisab_portals/${encodeURIComponent(portalKey)}.json` + (cfg.secret ? `?auth=${encodeURIComponent(cfg.secret)}` : '');
   try {
-    const res = await fetch(endpoint);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const d = await res.json();
-    if (!d || !d.customerName) throw new Error('Not found');
-    const bal = num(d.balance);
-    const balTxt = bal < 0 ? `<span class="bad">বকেয়া বাকি: ${money(-bal)}</span>` : (bal > 0 ? `<span class="good">অ্যাডভান্স জমা: ${money(bal)}</span>` : `<span class="good">৳0.00 (সমন্বিত)</span>`);
+    const res = await fetch(endpoint); if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json(); if (!d || !d.customerName) throw new Error('Not found');
+    const bal = num(d.balance), balTxt = bal < 0 ? `<span class="bad">বকেয়া বাকি: ${money(-bal)}</span>` : (bal > 0 ? `<span class="good">অ্যাডভান্স জমা: ${money(bal)}</span>` : `<span class="good">৳0.00 (সমন্বিত)</span>`);
     $('portalBody').innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--brand);padding-bottom:12px;margin-bottom:16px;flex-wrap:wrap;gap:10px">
         <div><h2 style="margin:0;color:var(--brand)">${esc(d.agencyName)}</h2><small class="muted">ক্লায়েন্ট লাইভ হিসাব পোর্টাল · আপডেট: ${esc(d.updatedAt || '')}</small></div>
@@ -2788,11 +2503,9 @@ async function checkAndRenderPortal() {
       <div style="margin-bottom:14px">${balTxt}</div>
       ${d.payInfo ? `<div style="padding:10px 12px;background:var(--soft);border:1px solid var(--line);border-radius:10px;font-size:13px;margin-bottom:16px"><strong>💳 পেমেন্ট মাধ্যম:</strong> ${esc(d.payInfo)}</div>` : ''}
       <h3>⚡ ক্যাম্পেইনসমূহ (${(d.works || []).length})</h3>
-      <div class="tablewrap" style="margin-bottom:18px"><table><thead><tr><th>তারিখ</th><th>ক্যাম্পেইন</th><th>ব্যবহৃত $</th><th>মোট বিল</th><th>স্ট্যাটাস</th></tr></thead>
-      <tbody>${(d.works || []).map(w => `<tr><td>${esc(w.date)}</td><td><strong>${esc(w.name)}</strong><br><small class="muted">${esc(w.page || '')}</small></td><td>${usd(w.spentUsd)}</td><td>${money(w.bill)}</td><td>${esc(w.status)}</td></tr>`).join('') || '<tr><td colspan="5">কোনো কাজ নেই</td></tr>'}</tbody></table></div>
+      <div class="tablewrap" style="margin-bottom:18px"><table><thead><tr><th>তারিখ</th><th>ক্যাম্পেইন</th><th>ব্যবহৃত $</th><th>মোট বিল</th><th>স্ট্যাটাস</th></tr></thead><tbody>${(d.works || []).map(w => `<tr><td>${esc(w.date)}</td><td><strong>${esc(w.name)}</strong><br><small class="muted">${esc(w.page || '')}</small></td><td>${usd(w.spentUsd)}</td><td>${money(w.bill)}</td><td>${esc(w.status)}</td></tr>`).join('') || '<tr><td colspan="5">কোনো কাজ নেই</td></tr>'}</tbody></table></div>
       <h3>💰 পেমেন্ট হিস্ট্রি (${(d.payments || []).length})</h3>
-      <div class="tablewrap"><table><thead><tr><th>তারিখ</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রেফারেন্স</th></tr></thead>
-      <tbody>${(d.payments || []).map(p => `<tr><td>${esc(p.date)}</td><td class="good">${money(p.amount)}</td><td>${esc(p.method)}</td><td>${esc(p.ref || '—')}</td></tr>`).join('') || '<tr><td colspan="4">কোনো পেমেন্ট নেই</td></tr>'}</tbody></table></div>`;
+      <div class="tablewrap"><table><thead><tr><th>তারিখ</th><th>পরিমাণ</th><th>মাধ্যম</th><th>রেফারেন্স</th></tr></thead><tbody>${(d.payments || []).map(p => `<tr><td>${esc(p.date)}</td><td class="good">${money(p.amount)}</td><td>${esc(p.method)}</td><td>${esc(p.ref || '—')}</td></tr>`).join('') || '<tr><td colspan="4">কোনো পেমেন্ট নেই</td></tr>'}</tbody></table></div>`;
   } catch (err) {
     $('portalBody').innerHTML = `<h3 style="color:var(--danger)">দুঃখিত, এই ক্লায়েন্ট পোর্টাল লিংকটি পাওয়া যায়নি বা মেয়াদ শেষ হয়েছে।</h3>`;
   }
@@ -2800,20 +2513,9 @@ async function checkAndRenderPortal() {
 }
 
 // PWA Service Worker & Install Prompt
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
-}
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault(); deferredInstallPrompt = e;
-  if ($('pwaInstallBtn')) $('pwaInstallBtn').style.display = 'inline-flex';
-});
-if ($('pwaInstallBtn')) $('pwaInstallBtn').onclick = async () => {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt = null;
-  $('pwaInstallBtn').style.display = 'none';
-};
+if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); }); }
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; if ($('pwaInstallBtn')) $('pwaInstallBtn').style.display = 'inline-flex'; });
+if ($('pwaInstallBtn')) $('pwaInstallBtn').onclick = async () => { if (!deferredInstallPrompt) return; deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt = null; $('pwaInstallBtn').style.display = 'none'; };
 
 // Auto-Lock after 20 minutes of inactivity
 (function initInactivityLock() {
@@ -2822,8 +2524,7 @@ if ($('pwaInstallBtn')) $('pwaInstallBtn').onclick = async () => {
     clearTimeout(idleTimer);
     if (!activeAccount) return;
     idleTimer = setTimeout(() => {
-      if (!activeAccount) return;
-      activeAccount = null; realSuperAdmin = null;
+      if (!activeAccount) return; activeAccount = null; realSuperAdmin = null;
       if ($('authOverlay')) $('authOverlay').style.display = 'flex';
       if ($('loginPass')) $('loginPass').value = '';
       toast('নিরাপত্তার জন্য ২০ মিনিট নিষ্ক্রিয় থাকায় স্ক্রিন লক হয়েছে!', 'warn');
@@ -2836,9 +2537,7 @@ if ($('pwaInstallBtn')) $('pwaInstallBtn').onclick = async () => {
 (async function bootApp() {
   if (await checkAndRenderPortal()) return;
   const cfg = readCloudSync();
-  if (cfg.url && navigator.onLine) {
-    await pullFromCloud(true, cfg.url, cfg.secret || '');
-  }
+  if (cfg.url && navigator.onLine) await pullFromCloud(true, cfg.url, cfg.secret || '');
   const savedLogin = decodeRemember(localStorage.getItem(REMEMBER_LOGIN_KEY));
   if (savedLogin && savedLogin.identity && savedLogin.pass) {
     if ($('loginUser')) $('loginUser').value = savedLogin.identity;
