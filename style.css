@@ -15,11 +15,11 @@ aside .brand .logo-badge{width:44px;height:44px;border-radius:13px;background:li
 aside .brand h1{font-size:16px;margin:0;font-weight:700;line-height:1.25;color:#fff}
 aside .brand small{display:block;margin-top:3px;font-size:10.5px;color:#aebbe8;letter-spacing:.35px}
 
-.side-menu{display:flex;flex-direction:column;gap:5px;overflow-y:auto;flex:1;padding-right:3px;scrollbar-width:thin;scrollbar-color:#52639b transparent}
-.side-menu button{width:100%;text-align:left;background:transparent;color:#c0c9e5;border:1px solid transparent;border-radius:11px;padding:10px 12px;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .18s}
+.side-menu{display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;padding-right:3px;scrollbar-width:thin;scrollbar-color:#52639b transparent}
+.side-menu button{width:100%;text-align:left;background:transparent;color:#c0c9e5;border:1px solid transparent;border-radius:11px;padding:9px 12px;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .18s}
 .side-menu button:hover{background:rgba(255,255,255,.09);color:#fff;transform:translateX(2px)}
 .side-menu button.active{background:linear-gradient(100deg,#4168f5,#7252e8);color:#fff;border-color:rgba(255,255,255,.16);box-shadow:0 7px 18px rgba(49,87,232,.3)}
-.side-footer{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:13px;margin-top:12px}
+.side-footer{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:13px;margin-top:10px}
 .side-footer h4{margin:0 0 3px;font-size:12.5px;color:#f8fafc}
 .side-footer p{margin:0;font-size:10.5px;color:#aebbe8}
 
@@ -56,6 +56,8 @@ main section{display:none;background:var(--surface);border:1px solid var(--line)
 main section.active{display:block;animation:fadeIn .2s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
+.notice-banner{display:none;background:linear-gradient(90deg,#3157e8,#7046e8);color:#fff;padding:10px 16px;border-radius:12px;margin-bottom:14px;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;box-shadow:0 6px 18px rgba(49,87,232,.22)}
+
 /* Metrics, Goal & Wallets */
 .metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
 .metric-card{border-radius:15px;padding:18px;color:white;position:relative;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,0.08)}
@@ -82,6 +84,12 @@ main section.active{display:block;animation:fadeIn .2s ease}
 .chart-legend{display:flex;gap:12px;font-size:11px;color:var(--muted)}
 .chart-legend span{display:inline-flex;align-items:center;gap:5px}
 .dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+
+/* Guide / Training Hub */
+.guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.guide-card{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:16px}
+.guide-card h3{margin:0 0 8px;font-size:14.5px;color:var(--brand);display:flex;align-items:center;gap:8px}
+.guide-card ol,.guide-card ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.7;color:var(--ink)}
 
 /* Forms & Controls */
 h2{font-size:18px;margin:0 0 16px;color:var(--ink);font-weight:700}
@@ -205,7 +213,7 @@ body.dark .status-paused{background:#1e293b;color:#94a3b8}
   aside{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%)}
   aside.open{transform:translateX(0)}
   #sidebarBackdrop.open{display:block}
-  .dashboard-grid{grid-template-columns:1fr}
+  .dashboard-grid,.guide-grid{grid-template-columns:1fr}
   .settings-layout{grid-template-columns:1fr}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .sync-pill span.sync-txt{display:none}
@@ -221,7 +229,6 @@ body.dark .status-paused{background:#1e293b;color:#94a3b8}
   .profile-pill{padding:3px}
 }
 
-/* Print Rules (Invoice, Receipt, POS) */
 @media print{
   body{background:#fff!important;color:#000!important;height:auto!important;overflow:visible!important;display:block!important}
   aside,header,.noprint,.float-fab,#authOverlay,#toastContainer,#sidebarBackdrop{display:none!important}
