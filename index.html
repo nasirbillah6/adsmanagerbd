@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#3157e8">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Ads হিসাব ম্যানেজার v72 Ultimate Pro</title>
+<title>Ads হিসাব ম্যানেজার v73 Pro</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233157e8'/%3E%3Ctext x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial' font-size='24' font-weight='bold'%3EAds%3C/text%3E%3C/svg%3E">
@@ -21,7 +21,6 @@
   body.no-perm-pay #navPay,body.no-perm-pay #navDue,body.no-perm-pay #payments,body.no-perm-pay #dues{display:none!important}
   body.no-perm-exp #navExp,body.no-perm-exp #expenses{display:none!important}
   body:not(.role-superadmin) .superadmin-only{display:none!important}
-  .modal-overlay{z-index:100000!important}#toastContainer{z-index:100005!important}
   .prog-wrap{width:100%;height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:4px}
   .prog-bar{height:100%;border-radius:99px;transition:width .25s}
   @media(max-width:640px){.perm-grid{grid-template-columns:1fr}}
@@ -31,6 +30,13 @@
 
 <div id="toastContainer"></div>
 <div id="sidebarBackdrop"></div>
+
+<!-- CLIENT READ-ONLY PORTAL OVERLAY -->
+<div id="clientPortalOverlay">
+  <div style="width:min(880px,100%);margin:20px auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 20px 45px rgba(0,0,0,0.12)" id="portalBody">
+    <p class="muted">ক্লায়েন্ট পোর্টাল লোড হচ্ছে...</p>
+  </div>
+</div>
 
 <!-- AUTH OVERLAY -->
 <div id="authOverlay">
@@ -84,7 +90,19 @@
   </div>
 </div>
 
-<!-- MODAL: LOGIN HELP (ADMIN & SUPER ADMIN) -->
+<!-- MODAL: QUICK SEARCH (Ctrl+K) -->
+<div id="quickSearchModal" class="modal-overlay">
+  <div class="modal-box" style="width:min(560px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px">
+      <h3 style="margin:0">🔍 দ্রুত খুঁজুন (কাস্টমার, ক্যাম্পেইন, পেজ, Ad ID)</h3>
+      <button type="button" class="secondary sm" onclick="closeModal('quickSearchModal')">Esc</button>
+    </div>
+    <input id="quickSearchInput" type="text" placeholder="নাম, মোবাইল বা ক্যাম্পেইনের নাম লিখুন..." style="margin-bottom:12px">
+    <div id="quickSearchResults" style="max-height:360px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- MODAL: LOGIN HELP -->
 <div id="loginHelpModal" class="modal-overlay">
   <div class="modal-box" style="width:min(470px,100%)">
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
@@ -168,7 +186,7 @@
           <span id="invStatusStamp" class="badge-danger" style="margin-top:4px">DUE</span>
         </div>
       </div>
-      <div style="margin-bottom:16px;font-size:13.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="margin-bottom:14px;font-size:13.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div>
           <strong>কাস্টমার বিবরণ:</strong><br>
           <span id="invCustName" style="font-size:16px;font-weight:700">--</span><br>
@@ -176,13 +194,14 @@
         </div>
         <div id="invPeriodLabel" style="font-size:12px;color:#64748b;align-self:flex-end"></div>
       </div>
-      <div class="tablewrap" style="margin-bottom:16px">
+      <div id="invOpeningRow" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:8px;background:var(--soft);border:1px solid var(--line);font-size:13px"></div>
+      <div class="tablewrap" style="margin-bottom:14px">
         <table>
-          <thead><tr><th>তারিখ</th><th>কাজের বিবরণ</th><th>ডলার / রেট</th><th>বিল (৳)</th></tr></thead>
+          <thead><tr><th>তারিখ</th><th>কাজের বিবরণ</th><th>ডলার / রেট ও চার্জ</th><th>বিল (৳)</th></tr></thead>
           <tbody id="invRows"></tbody>
         </table>
       </div>
-      <div id="invPayWrap" style="display:none;margin-bottom:16px">
+      <div id="invPayWrap" style="display:none;margin-bottom:14px">
         <strong style="font-size:12.5px;color:#334155;display:block;margin-bottom:6px">💰 আদায়কৃত পেমেন্ট বিবরণ:</strong>
         <div class="tablewrap" style="margin-top:0">
           <table>
@@ -191,12 +210,15 @@
           </table>
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;font-size:14px;gap:22px;margin-bottom:12px;flex-wrap:wrap;padding:12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;color:#0f172a">
-        <div>মোট বিল: <strong id="invTotalBill">৳0</strong></div>
-        <div>মোট আদায়: <strong id="invTotalPaid" style="color:#059669">৳0</strong></div>
-        <div id="invBalanceBox">বকেয়া বাকি: <strong id="invTotalDue" style="color:#dc2626">৳0</strong></div>
+      <div style="display:flex;justify-content:flex-end;font-size:14px;gap:20px;margin-bottom:12px;flex-wrap:wrap;padding:12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;color:#0f172a">
+        <div>নির্বাচিত বিল: <strong id="invTotalBill">৳0</strong></div>
+        <div>নির্বাচিত আদায়: <strong id="invTotalPaid" style="color:#059669">৳0</strong></div>
+        <div id="invBalanceBox">সর্বমোট বকেয়া: <strong id="invTotalDue" style="color:#dc2626">৳0</strong></div>
       </div>
-      <div id="invPayInfoBox" style="display:none;font-size:12px;padding:9px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a;margin-bottom:10px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+        <div id="invPayInfoBox" style="display:none;flex:1;font-size:12px;padding:9px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;color:#1e3a8a"></div>
+        <img id="invQrImg" alt="Payment QR" style="display:none;width:78px;height:78px;object-fit:contain;border:1px solid #cbd5e1;border-radius:8px;padding:3px;background:#fff">
+      </div>
       <div id="invSignWrap" style="display:none;justify-content:flex-end;margin:18px 0 6px">
         <div style="text-align:center;border-top:1px solid #94a3b8;padding-top:4px;min-width:150px;font-size:12px;color:#334155" id="invSignText">Authorized Signature</div>
       </div>
@@ -212,7 +234,7 @@
 
 <!-- MODAL: CLIENT PROFILE & LEDGER -->
 <div id="clientProfileModal" class="modal-overlay">
-  <div class="modal-box" style="width:min(820px,100%)">
+  <div class="modal-box" style="width:min(840px,100%)">
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
       <h3 style="margin:0" id="cpTitle">ক্লায়েন্ট প্রোফাইল</h3>
       <button type="button" class="secondary sm" onclick="closeModal('clientProfileModal')">✕ বন্ধ করুন</button>
@@ -238,7 +260,7 @@
   </div>
 </div>
 
-<!-- MODAL: EDIT USER (SUPER ADMIN) -->
+<!-- MODAL: EDIT USER -->
 <div id="editUserModal" class="modal-overlay">
   <div class="modal-box" style="width:min(520px,100%)">
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px">
@@ -331,6 +353,12 @@
         <div class="field"><label>বাজেট ($)</label><input id="ewDollar" type="number" min="0" step=".01" required></div>
         <div class="field"><label>বিলিং রেট (৳/$)</label><input id="ewRate" type="number" min=".01" step=".01" required></div>
         <div class="field"><label>ব্যবহৃত ডলার ($)</label><input id="ewActualDollar" type="number" min="0" step=".01" required></div>
+        <div class="field"><label>ক্লায়েন্ট সার্ভিস চার্জ</label>
+          <div style="display:flex;gap:6px">
+            <input id="ewServiceFee" type="number" min="0" step=".01" value="0" style="flex:1;min-width:0">
+            <select id="ewServiceFeeType" style="width:74px"><option value="fixed">৳</option><option value="pct">%</option></select>
+          </div>
+        </div>
         <div class="field staff-hide"><label>ব্যাংক কার্ড</label><select id="ewCard"><option value="">কার্ড নির্বাচন</option></select></div>
         <div class="field staff-hide"><label>কেনা রেট (৳/$)</label><input id="ewActualRate" type="number" min="0" step=".01"></div>
         <div class="field staff-hide"><label>ভ্যাট / ব্যাংক ফি (%)</label><input id="ewFeePct" type="number" min="0" step=".1" value="0"></div>
@@ -360,6 +388,7 @@
       <div class="field"><label>কাস্টমার</label><select id="epCustomer" required></select></div>
       <div class="field"><label>পরিমাণ (৳)</label><input id="epAmount" type="number" min=".01" step=".01" required></div>
       <div class="field"><label>মাধ্যম</label><select id="epMethod"><option>bKash</option><option>Nagad</option><option>Bank</option><option>Card</option><option>Cash</option></select></div>
+      <div class="field"><label>ক্যাশআউট / গেটওয়ে চার্জ (৳)</label><input id="epFee" type="number" min="0" step=".01" value="0"></div>
       <div class="field"><label>রেফারেন্স</label><input id="epRef"></div>
       <div class="field"><label>নোট</label><input id="epNote"></div>
       <button type="submit">আপডেট করুন</button>
@@ -388,6 +417,7 @@
           <option value="Others">অন্যান্য</option>
         </select>
       </div>
+      <div class="field"><label>খরচের মাধ্যম</label><select id="eeMethod"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option></select></div>
       <div class="field"><label>পরিমাণ (৳)</label><input id="eeAmount" type="number" min="1" step=".01" required></div>
       <div class="field"><label>নোট</label><input id="eeNote"></div>
       <button type="submit">আপডেট করুন</button>
@@ -408,6 +438,7 @@
       <div class="field"><label>তারিখ</label><input id="edDate" type="date" required></div>
       <div class="field"><label>জমা ডলার ($)</label><input id="edAmount" type="number" min="0.01" step=".01" required></div>
       <div class="field"><label>মোট কেনা টাকা (৳)</label><input id="edTaka" type="number" min="0" step=".01" required></div>
+      <div class="field"><label>টাকা পরিশোধের মাধ্যম</label><select id="edMethod"><option>Bank</option><option>Cash</option><option>bKash</option><option>Nagad</option></select></div>
       <div class="field"><label>নোট</label><input id="edNote"></div>
       <button type="submit">আপডেট করুন</button>
     </form>
@@ -438,7 +469,7 @@
       <div class="logo-badge">Ads</div>
       <div>
         <h1 id="sideBrandTitle">Ads হিসাব ম্যানেজার</h1>
-        <small id="sideBrandSub">Smart · Secure · Pro v72</small>
+        <small id="sideBrandSub">Smart · Secure · Pro v73</small>
       </div>
     </div>
     <div class="side-menu">
@@ -447,9 +478,9 @@
       <button data-tab="cards" id="navCards" class="staff-hide">💳 ডলার ও কার্ড হিসাব</button>
       <button data-tab="rates" id="navRates">📈 দৈনিক ডলার রেট</button>
       <button data-tab="works" id="navWorks">⚡ কাজের হিসাব</button>
-      <button data-tab="pixelGen" id="navPixel">🎯 মেটা পিক্সেল ও ট্র্যাকিং</button>
+      <button data-tab="pixelGen" id="navPixel">🎯 মেটা পিক্সেল ও অ্যাড অ্যাকাউন্ট</button>
       <button data-tab="expenses" id="navExp">💸 অফিস ও অন্যান্য খরচ</button>
-      <button data-tab="payments" id="navPay">💰 পেমেন্ট অ্যাড</button>
+      <button data-tab="payments" id="navPay">💰 পেমেন্ট ও ক্যাশবুক</button>
       <button data-tab="dues" id="navDue">📑 বকেয়া ও অটোমেশন</button>
       <button data-tab="monthly" id="navMonthly">📅 মাসিক বা নির্দিষ্ট হিসাব</button>
       <button data-tab="reports" id="navRep" class="staff-hide">📂 ব্যাকআপ ও রিপোর্ট</button>
@@ -476,6 +507,10 @@
       </div>
     </div>
     <div class="user-info">
+      <button type="button" id="pwaInstallBtn" class="secondary sm" style="display:none;margin:0" title="অ্যাপ ইনস্টল করুন">📲 Install</button>
+      <button type="button" id="syncStatusBtn" class="sync-pill" title="ক্লাউড সিঙ্ক স্ট্যাটাস (ক্লিক করলে সিঙ্ক হবে)">⚪ <span class="sync-txt">Local</span></button>
+      <button type="button" class="icon-btn" id="quickSearchBtn" title="দ্রুত খুঁজুন (Ctrl + K)">🔍</button>
+      <button type="button" class="icon-btn" id="lockScreenBtn" title="স্ক্রিন লক করুন">🔒</button>
       <button type="button" class="theme-toggle" id="themeToggleBtn" title="ডার্ক/লাইট মোড পরিবর্তন">🌙</button>
       <div class="notif" id="notifIcon" title="বিজ্ঞপ্তি">🔔<span id="notifCount" style="display:none">0</span></div>
       <div class="notif-dropdown" id="notifBox">
@@ -511,8 +546,8 @@
       <div class="periodbar noprint" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px">
         <div><label id="lblDashFrom">শুরুর তারিখ</label><input type="date" id="dashFrom"></div>
         <div><label id="lblDashTo">শেষ তারিখ</label><input type="date" id="dashTo"></div>
-        <button type="button" id="applyDashDates">ফিল্টার রিপোর্ট</button>
-        <button type="button" id="clearDashDates" class="secondary">সব তারিখ</button>
+        <button type="button" id="applyDashDates" data-i18n="btnFilter">ফিল্টার রিপোর্ট</button>
+        <button type="button" id="clearDashDates" class="secondary" data-i18n="btnAllDates">সব তারিখ</button>
       </div>
 
       <div class="metrics-grid">
@@ -523,10 +558,10 @@
       </div>
 
       <div class="metrics-grid" style="margin-bottom:20px">
-        <div class="metric-card" style="background:linear-gradient(135deg,#475569 0%,#1e293b 100%)"><small>আজকের মোট বিল</small><strong id="mTodayBill">৳0</strong></div>
-        <div class="metric-card staff-hide" style="background:linear-gradient(135deg,#ec4899 0%,#be185d 100%)"><small>আজকের এড খরচ</small><strong id="mTodaySpend">৳0</strong></div>
-        <div class="metric-card" style="background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%)"><small>মোট আদায়কৃত টাকা</small><strong id="mTotalPaid">৳0</strong><span class="trend" id="mAdvanceNote"></span></div>
-        <div class="metric-card" style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%)"><small>মোট বকেয়া পাওনা</small><strong id="mDue">৳0</strong></div>
+        <div class="metric-card" style="background:linear-gradient(135deg,#475569 0%,#1e293b 100%)"><small data-i18n="cTodayBill">আজকের মোট বিল</small><strong id="mTodayBill">৳0</strong></div>
+        <div class="metric-card staff-hide" style="background:linear-gradient(135deg,#ec4899 0%,#be185d 100%)"><small data-i18n="cTodaySpend">আজকের এড খরচ</small><strong id="mTodaySpend">৳0</strong></div>
+        <div class="metric-card" style="background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%)"><small data-i18n="cTotalPaid">মোট আদায়কৃত টাকা</small><strong id="mTotalPaid">৳0</strong><span class="trend" id="mAdvanceNote"></span></div>
+        <div class="metric-card" style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%)"><small data-i18n="cTotalDue">মোট বকেয়া পাওনা</small><strong id="mDue">৳0</strong></div>
       </div>
 
       <div class="dashboard-grid">
@@ -548,15 +583,21 @@
           <div id="topClientsList" style="display:flex;flex-direction:column;gap:10px;padding-top:4px"></div>
           <div class="staff-hide">
             <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
-            <h4 style="margin:0 0 8px;font-size:13px;color:var(--ink)">💳 কার্ড ব্যালেন্স সংক্ষেপ</h4>
-            <div id="dashCardSummary" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+            <h4 style="margin:0 0 8px;font-size:13px;color:var(--ink)">💳 কার্ড ব্যালেন্স ও ওয়ালেট সংক্ষেপ</h4>
+            <div id="dashCardSummary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
+            <div id="dashWalletSummary" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+          <div id="dashLowPrepaidWrap" style="margin-top:12px;display:none">
+            <hr style="border:0;border-top:1px solid var(--line);margin:10px 0">
+            <h4 style="margin:0 0 6px;font-size:12.5px;color:#d97706">⚠️ লো-অ্যাডভান্স ক্লায়েন্ট সতর্কতা</h4>
+            <div id="dashLowPrepaidList" style="display:flex;flex-direction:column;gap:6px"></div>
           </div>
         </div>
       </div>
 
       <div class="chart-box">
         <div class="chart-header">
-          <h3>⚡ চলমান ক্যাম্পেইন ও মেয়াদ মনিটর (Active Ads)</h3>
+          <h3 data-i18n="activeAdsTitle">⚡ চলমান ক্যাম্পেইন ও মেয়াদ মনিটর (Active Ads)</h3>
           <button type="button" class="secondary sm" onclick="goToSection('works')">+ নতুন কাজ</button>
         </div>
         <div class="tablewrap" style="margin-top:0">
@@ -603,6 +644,7 @@
           <tbody id="customerRows"></tbody>
         </table>
       </div>
+      <div class="pager" id="custPager"></div>
 
       <h2 style="margin-top:24px">পেজ ও মেটা ট্র্যাকিং তালিকা</h2>
       <div class="tablewrap">
@@ -633,15 +675,45 @@
           <div class="field"><label>তারিখ (টাকা জমার তারিখ)</label><input id="depositDate" type="date" required></div>
           <div class="field"><label>জমা ডলার ($)</label><input id="depositAmount" type="number" min="0.01" step=".01" required placeholder="100"></div>
           <div class="field"><label>মোট কেনা টাকা (৳)</label><input id="depositTaka" type="number" min="0" step=".01" required placeholder="12200"></div>
+          <div class="field"><label>টাকা পরিশোধের মাধ্যম (ওয়ালেট)</label><select id="depositMethod"><option>Bank</option><option>Cash</option><option>bKash</option><option>Nagad</option></select></div>
           <div class="field"><label>নোট</label><input id="depositNote" placeholder="ব্যাংক রেট বা নোট"></div>
         </div>
         <button type="submit">ডিপোজিট সেভ করুন</button>
       </form>
 
+      <div class="dashboard-grid" style="margin-top:22px">
+        <div class="card-add-box" style="margin:0">
+          <h3 style="margin:0 0 10px;font-size:14px">🔄 কার্ড-টু-কার্ড ডলার ট্রান্সফার</h3>
+          <form id="cardTransferForm">
+            <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+              <div class="field"><label>কোন কার্ড থেকে *</label><select id="trFromCard" required></select></div>
+              <div class="field"><label>কোন কার্ডে যাবে *</label><select id="trToCard" required></select></div>
+              <div class="field"><label>তারিখ</label><input id="trDate" type="date" required></div>
+              <div class="field"><label>ডলার ($)</label><input id="trAmount" type="number" min="0.01" step=".01" required placeholder="50"></div>
+            </div>
+            <div class="field"><label>নোট</label><input id="trNote" placeholder="ট্রান্সফার কারণ"></div>
+            <button type="submit" class="secondary">ট্রান্সফার করুন</button>
+          </form>
+        </div>
+
+        <div class="card-add-box" style="margin:0">
+          <h3 style="margin:0 0 10px;font-size:14px">↩️ Meta ডলার রিফান্ড / কার্ড অ্যাডজাস্টমেন্ট</h3>
+          <form id="cardRefundForm">
+            <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+              <div class="field"><label>কার্ড *</label><select id="rfCard" required></select></div>
+              <div class="field"><label>তারিখ</label><input id="rfDate" type="date" required></div>
+              <div class="field"><label>রিফান্ড ডলার ($)</label><input id="rfAmount" type="number" min="0.01" step=".01" required placeholder="20"></div>
+              <div class="field"><label>নোট / কারণ</label><input id="rfNote" placeholder="Disabled Ad Refund"></div>
+            </div>
+            <button type="submit" class="secondary">রিফান্ড যোগ করুন</button>
+          </form>
+        </div>
+      </div>
+
       <h2 style="margin-top:24px">কার্ড ব্যালেন্স ও গড় রেট সারাংশ</h2>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>কার্ড নাম</th><th>মোট কেনা ($)</th><th>মোট টাকা (৳)</th><th>গড় রেট (৳/$)</th><th>FB খরচ ($)</th><th>অবশিষ্ট ($)</th><th>অ্যাকশন</th></tr></thead>
+          <thead><tr><th>কার্ড নাম</th><th>মোট কেনা/জমা ($)</th><th>মোট টাকা (৳)</th><th>গড় রেট (৳/$)</th><th>FB খরচ / আউট ($)</th><th>অবশিষ্ট ($)</th><th>অ্যাকশন</th></tr></thead>
           <tbody id="cardBalanceRows"></tbody>
         </table>
       </div>
@@ -649,9 +721,20 @@
       <h2 style="margin-top:24px">ডলার ডিপোজিট হিস্ট্রি</h2>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>তারিখ</th><th>কার্ড</th><th>ডলার ($)</th><th>টাকা (৳)</th><th>রেট (৳/$)</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
+          <thead><tr><th>তারিখ</th><th>কার্ড</th><th>ডলার ($)</th><th>টাকা (৳)</th><th>রেট (৳/$)</th><th>মাধ্যম ও নোট</th><th>অ্যাকশন</th></tr></thead>
           <tbody id="depositHistoryRows"></tbody>
         </table>
+      </div>
+
+      <div class="dashboard-grid" style="margin-top:20px">
+        <div>
+          <h3>ট্রান্সফার হিস্ট্রি</h3>
+          <div class="tablewrap"><table><thead><tr><th>তারিখ</th><th>থেকে → প্রতি</th><th>ডলার</th><th>অ্যাকশন</th></tr></thead><tbody id="cardTransferRows"></tbody></table></div>
+        </div>
+        <div>
+          <h3>রিফান্ড হিস্ট্রি</h3>
+          <div class="tablewrap"><table><thead><tr><th>তারিখ</th><th>কার্ড</th><th>রিফান্ড ($)</th><th>নোট</th><th>অ্যাকশন</th></tr></thead><tbody id="cardRefundRows"></tbody></table></div>
+        </div>
       </div>
     </section>
 
@@ -687,10 +770,16 @@
           <div class="field"><label>ক্যাম্পেইন বাজেট ($)</label><input id="wDollar" type="number" min="0" step=".01" required placeholder="50"></div>
           <div class="field"><label>ক্লায়েন্ট বিল রেট (৳/$) *</label><input id="wRate" type="number" min=".01" step=".01" required placeholder="125"></div>
           <div class="field"><label>Facebook এ ব্যবহৃত ডলার ($)</label><div style="display:flex;gap:6px"><input id="wActualDollar" type="number" min="0" step=".01" value="0" placeholder="48" style="flex:1;min-width:0"><button type="button" class="secondary sm" onclick="matchBudgetDollar()" title="বাজেটের সমান ডলার বসান" style="white-space:nowrap;margin:0">= বাজেট</button></div></div>
+          <div class="field"><label>ক্লায়েন্ট সার্ভিস চার্জ (বিলে যোগ হবে)</label>
+            <div style="display:flex;gap:6px">
+              <input id="wServiceFee" type="number" min="0" step=".01" value="0" placeholder="0" style="flex:1;min-width:0">
+              <select id="wServiceFeeType" style="width:74px"><option value="fixed">৳</option><option value="pct">%</option></select>
+            </div>
+          </div>
           <div class="field staff-hide"><label>ব্যবহৃত ব্যাংক কার্ড</label><select id="wCard"><option value="">কার্ড নির্বাচন</option></select></div>
           <div class="field staff-hide"><label>প্রকৃত ডলার কেনা রেট (৳/$)</label><input id="wActualRate" type="number" min="0" step=".01" value="0" placeholder="120"></div>
           <div class="field staff-hide"><label>Meta VAT / ব্যাংক ফি (%)</label><input id="wFeePct" type="number" min="0" step=".1" value="0" placeholder="যেমন: 15 বা 2"></div>
-          <div class="field staff-hide"><label>অন্যান্য সার্ভিস খরচ (৳)</label><input id="wOther" type="number" min="0" step=".01" value="0" placeholder="0"></div>
+          <div class="field staff-hide"><label>অন্যান্য খরচ (৳)</label><input id="wOther" type="number" min="0" step=".01" value="0" placeholder="0"></div>
           <div class="field"><label>ক্যাম্পেইন থেকে আয় (৳) [ROAS]</label><input id="wRevenue" type="number" min="0" step=".01" value="0" placeholder="0"></div>
           <div class="field"><label>কনভার্শন সংখ্যা [CPA]</label><input id="wConversions" type="number" min="0" value="0" placeholder="0"></div>
           <div class="field"><label>ক্রিয়েটিভ ড্রাইভ/Canva লিংক</label><input id="wCreativeLink" type="url" placeholder="https://..."></div>
@@ -716,16 +805,17 @@
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>ID</th><th>তারিখ</th><th>কাস্টমার ও পেজ</th><th>কাজ</th><th>ব্যবহৃত $</th><th>বিল (৳)</th><th class="staff-hide">প্রকৃত খরচ (ফি সহ)</th><th class="staff-hide">লাভ (৳)</th><th>ROAS & CPA</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr></thead>
+          <thead><tr><th>ID</th><th>তারিখ</th><th>কাস্টমার ও পেজ</th><th>কাজ</th><th>ব্যবহৃত $</th><th>মোট বিল (৳)</th><th class="staff-hide">প্রকৃত খরচ (ফি সহ)</th><th class="staff-hide">লাভ (৳)</th><th>ROAS & CPA</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr></thead>
           <tbody id="workRows"></tbody>
         </table>
       </div>
+      <div class="pager" id="workPager"></div>
     </section>
 
-    <!-- 6: META PIXEL HUB -->
+    <!-- 6: META PIXEL & AD ACCOUNT HUB -->
     <section id="pixelGen">
-      <h2>🎯 মেটা পিক্সেল ও কনভার্শন ট্র্যাকিং হাব (Meta Pixel & CAPI)</h2>
-      <p class="muted" style="margin-bottom:16px">আপনার সংগৃহীত পিক্সেল আইডি ম্যানেজ করুন, ইভেন্ট কোড জেনারেট করুন এবং CAPI পেলোড তৈরি করুন।</p>
+      <h2>🎯 মেটা পিক্সেল, CAPI এবং অ্যাড অ্যাকাউন্ট হেলথ হাব</h2>
+      <p class="muted" style="margin-bottom:16px">আপনার সংগৃহীত পিক্সেল আইডি ম্যানেজ করুন, ইভেন্ট কোড জেনারেট করুন এবং আপনার Ad Account / BM-এর স্ট্যাটাস ট্র্যাক করুন।</p>
 
       <div class="grid">
         <div class="field"><label>পিক্সেল আইডি দিন</label><input id="genPixelId" placeholder="যেমন: 123456789012345" value="1234567890"></div>
@@ -754,6 +844,33 @@
 
       <hr style="border:0;border-top:1px solid var(--line);margin:24px 0">
 
+      <h3>🛡️ Ad Account & BM Health Tracker (অ্যাড অ্যাকাউন্ট মনিটর)</h3>
+      <form id="adAccountForm" style="margin-bottom:16px">
+        <div class="grid">
+          <div class="field"><label>অ্যাকাউন্ট নাম *</label><input id="aaName" required placeholder="যেমন: Agency BM-01 Ad Acc"></div>
+          <div class="field"><label>Ad Account ID</label><input id="aaId" placeholder="act_123456789"></div>
+          <div class="field"><label>BM নাম</label><input id="aaBm" placeholder="Main Verified BM"></div>
+          <div class="field staff-hide"><label>যুক্ত কার্ড</label><select id="aaCard"><option value="">কার্ড নির্বাচন</option></select></div>
+          <div class="field"><label>থ্রেশহোল্ড লিমিট ($)</label><input id="aaThreshold" type="number" min="0" step=".01" value="25"></div>
+          <div class="field"><label>বকেয়া / Unpaid ($)</label><input id="aaUnpaid" type="number" min="0" step=".01" value="0"></div>
+          <div class="field"><label>হেলথ স্ট্যাটাস</label>
+            <select id="aaStatus">
+              <option value="Active">🟢 Active</option>
+              <option value="Payment Hold">🟡 Payment Hold</option>
+              <option value="Restricted">🟠 Restricted</option>
+              <option value="Disabled">🔴 Disabled</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit">+ অ্যাড অ্যাকাউন্ট যোগ করুন</button>
+      </form>
+      <div class="tablewrap" style="margin-bottom:24px">
+        <table>
+          <thead><tr><th>নাম ও BM</th><th>Ad Account ID</th><th>যুক্ত কার্ড</th><th>থ্রেশহোল্ড / Unpaid</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="adAccountRows"></tbody>
+        </table>
+      </div>
+
       <h3>📡 ক্লায়েন্ট অনুযায়ী সেভ থাকা Meta Pixel আইডি তালিকা</h3>
       <div class="tablewrap">
         <table>
@@ -780,8 +897,9 @@
               <option value="Others">অন্যান্য</option>
             </select>
           </div>
+          <div class="field"><label>খরচের মাধ্যম (ওয়ালেট)</label><select id="expMethod"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option></select></div>
           <div class="field"><label>পরিমাণ (৳) *</label><input id="expAmount" type="number" min="1" step=".01" required placeholder="500"></div>
-          <div class="field" style="grid-column:span 2"><label>নোট</label><input id="expNote" placeholder="অতিরিক্ত বিবরণ"></div>
+          <div class="field"><label>নোট</label><input id="expNote" placeholder="অতিরিক্ত বিবরণ"></div>
         </div>
         <button type="submit">খরচ সেভ করুন</button>
       </form>
@@ -793,15 +911,33 @@
       <div id="expenseCategorySummary" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0"></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>তারিখ</th><th>খরচের টাইটেল</th><th>ক্যাটাগরি</th><th>পরিমাণ</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
+          <thead><tr><th>তারিখ</th><th>খরচের টাইটেল</th><th>ক্যাটাগরি ও মাধ্যম</th><th>পরিমাণ</th><th>নোট</th><th>অ্যাকশন</th></tr></thead>
           <tbody id="expenseRows"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- 8: PAYMENTS -->
+    <!-- 8: PAYMENTS & CASHBOOK -->
     <section id="payments">
-      <h2>💰 পেমেন্ট গ্রহণ ও রেকর্ড (অ্যাডভান্স / বকেয়া)</h2>
+      <h2>💰 পেমেন্ট গ্রহণ ও ওয়ালেট ক্যাশবুক (Wallet Balance)</h2>
+
+      <div class="wallet-grid staff-hide" id="walletMetrics"></div>
+
+      <div class="card-add-box staff-hide">
+        <h3 style="margin:0 0 10px;font-size:14px">🏦 ওয়ালেট ব্যালেন্স অ্যাডজাস্ট / উত্তোলন (Cash / bKash / Nagad / Bank)</h3>
+        <form id="cashAdjustForm">
+          <div class="grid" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+            <div class="field"><label>তারিখ</label><input id="caDate" type="date" required></div>
+            <div class="field"><label>অ্যাকাউন্ট</label><select id="caMethod"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option></select></div>
+            <div class="field"><label>ধরণ</label><select id="caType"><option value="in">জমা / ওপেনিং (+)</option><option value="out">উত্তোলন / খরচ (-)</option></select></div>
+            <div class="field"><label>টাকা (৳) *</label><input id="caAmount" type="number" min="1" step=".01" required placeholder="5000"></div>
+            <div class="field"><label>নোট *</label><input id="caNote" required placeholder="ব্যাংক থেকে ক্যাশ উত্তোলন"></div>
+          </div>
+          <button type="submit" class="secondary sm">ক্যাশবুক আপডেট করুন</button>
+        </form>
+      </div>
+
+      <h3>কাস্টমার পেমেন্ট যোগ করুন</h3>
       <form id="paymentForm">
         <div class="grid">
           <div class="field"><label>তারিখ</label><input id="pDate" type="date" required></div>
@@ -822,16 +958,26 @@
           <tbody id="paymentRows"></tbody>
         </table>
       </div>
+      <div class="pager" id="payPager"></div>
     </section>
 
     <!-- 9: DUES & WHATSAPP -->
     <section id="dues">
-      <h2>📑 বকেয়া, অ্যাডভান্স ও WhatsApp রিমাইন্ডার</h2>
+      <h2>📑 বকেয়া, লো-অ্যাডভান্স ও WhatsApp রিমাইন্ডার</h2>
       <div class="metrics-grid" id="dueMetrics" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))"></div>
+      <h3>বকেয়া থাকা কাস্টমার</h3>
       <div class="tablewrap">
         <table>
           <thead><tr><th>কাস্টমার</th><th>ফোন</th><th>মোট বিল</th><th>আদায়কৃত</th><th>বকেয়া টাকা</th><th>শেষ রিমাইন্ডার লগ</th><th>অ্যাকশন</th></tr></thead>
           <tbody id="dueRows"></tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:24px">⚠️ প্রিপেইড ব্যালেন্স শেষের দিকে (৳১,০০০-এর কম অ্যাডভান্স)</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>কাস্টমার</th><th>ফোন</th><th>অবশিষ্ট অ্যাডভান্স</th><th>অ্যাকশন</th></tr></thead>
+          <tbody id="lowPrepaidRows"></tbody>
         </table>
       </div>
     </section>
@@ -892,7 +1038,7 @@
       <div class="settings-layout">
         <nav class="settings-menu">
           <button type="button" class="active" data-settings-panel="profilePanel">👤 প্রোফাইল তথ্য</button>
-          <button type="button" data-settings-panel="agencyPanel" class="staff-hide">🏢 এজেন্সি, পেমেন্ট ও মেসেজ</button>
+          <button type="button" data-settings-panel="agencyPanel" class="staff-hide">🏢 এজেন্সি, QR ও মেসেজ</button>
           <button type="button" data-settings-panel="usernamePanel">🔐 ইউজারনেম পরিবর্তন</button>
           <button type="button" data-settings-panel="passwordPanel">🔑 পাসওয়ার্ড পরিবর্তন</button>
           <button type="button" data-settings-panel="languagePanel">🌐 ভাষা সেটিংস</button>
@@ -925,7 +1071,7 @@
           </div>
 
           <div id="agencyPanel" class="settings-panel">
-            <h3>🏢 এজেন্সি ব্র্যান্ডিং, লোগো, পেমেন্ট নম্বর ও WhatsApp টেমপ্লেট</h3>
+            <h3>🏢 এজেন্সি ব্র্যান্ডিং, লোগো, পেমেন্ট QR ও WhatsApp টেমপ্লেট</h3>
             <p class="muted" style="margin-bottom:14px">এই তথ্যগুলো আপনার সাইডবার, ইনভয়েস এবং WhatsApp রিমাইন্ডারে ব্যবহৃত হবে।</p>
             <form id="agencyForm">
               <div class="grid">
@@ -934,10 +1080,11 @@
                 <div class="field"><label>অফিস ফোন / WhatsApp</label><input id="agPhone" placeholder="017XXXXXXXX"></div>
                 <div class="field"><label>ডিফল্ট ক্লায়েন্ট বিল রেট (৳/$)</label><input id="agDefaultRate" type="number" step=".01" min="1" value="125"></div>
                 <div class="field"><label>ডিফল্ট Meta VAT / ব্যাংক ফি (%)</label><input id="agDefaultFee" type="number" step=".1" min="0" value="0" placeholder="যেমন: 15 বা 0"></div>
+                <div class="field"><label>ইনভয়েস স্বাক্ষরের নাম / পদবি</label><input id="agSignText" placeholder="যেমন: Authorized Signature"></div>
               </div>
               <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
                 <div class="field"><label>এজেন্সি লোগো ছবির লিংক (URL)</label><input id="agLogoUrl" type="url" placeholder="https://.../logo.png (ঐচ্ছিক)"></div>
-                <div class="field"><label>ইনভয়েস স্বাক্ষরের নাম / পদবি</label><input id="agSignText" placeholder="যেমন: Authorized Signature"></div>
+                <div class="field"><label>bKash / Nagad / Bank QR ছবির লিংক (URL)</label><input id="agQrUrl" type="url" placeholder="https://.../qr.png (ঐচ্ছিক)"></div>
               </div>
               <div class="field"><label>পেমেন্ট গ্রহণের বিবরণ (ইনভয়েস ও WhatsApp-এ দেখাবে)</label>
                 <input id="agPayInfo" placeholder="যেমন: bKash: 017XXXXXXXX (Personal) | Nagad: 017XXXXXXXX | Bank: ...">
@@ -1120,18 +1267,18 @@
         </div>
 
         <div class="card-add-box">
-          <h3 style="margin:0 0 8px">☁️ ক্লাউড সিঙ্ক (Firebase Realtime Database — অনলাইন চ্যাট ও মাল্টি-ডিভাইস)</h3>
-          <p class="muted" style="margin:0 0 12px">পিসি ও স্টাফের মোবাইলে একই লাইভ ডেটা ও অনলাইন চ্যাট চালু করতে আপনার Firebase Realtime Database-এর URL দিন। (খালি রাখলে অফলাইন চলবে)</p>
+          <h3 style="margin:0 0 8px">☁️ ক্লাউড সিঙ্ক (Firebase Realtime Database — কনফ্লিক্ট-ফ্রি মার্জ ও মাল্টি-ডিভাইস)</h3>
+          <p class="muted" style="margin:0 0 12px">পিসি ও স্টাফের মোবাইলে একই লাইভ ডেটা ও অনলাইন চ্যাট চালু করতে আপনার Firebase Realtime Database URL দিন। স্মার্ট মার্জ সিস্টেম একসাথে কাজ করলেও ডেটা ওভাররাইট হতে দেয় না।</p>
           <form id="cloudSyncForm">
             <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
               <div class="field"><label>Firebase Database URL</label><input id="csUrl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com"></div>
               <div class="field"><label>Database Secret / Auth (ঐচ্ছিক)</label><input id="csSecret" type="password" placeholder="ঐচ্ছিক"></div>
             </div>
-            <label class="perm-item" style="margin-bottom:12px"><input type="checkbox" id="csAutoSync"> প্রতিবার সেভ করলে অটোমেটিক ক্লাউডে ব্যাকআপ (Auto Push) হবে</label>
+            <label class="perm-item" style="margin-bottom:12px"><input type="checkbox" id="csAutoSync"> প্রতিবার সেভ করলে অটোমেটিক ক্লাউডে মার্জ ও ব্যাকআপ (Auto Sync) হবে</label>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button type="submit">💾 সিঙ্ক সেটিংস সেভ</button>
-              <button type="button" id="csPushBtn" class="secondary">⬆️ ক্লাউডে পাঠান (Push)</button>
-              <button type="button" id="csPullBtn" class="secondary">⬇️ ক্লাউড থেকে আনুন (Pull)</button>
+              <button type="button" id="csPushBtn" class="secondary">⬆️ স্মার্ট মার্জ ও Push</button>
+              <button type="button" id="csPullBtn" class="secondary">⬇️ ক্লাউড থেকে Pull ও মার্জ</button>
               <span id="csLastSyncText" class="muted"></span>
             </div>
           </form>
