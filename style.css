@@ -92,9 +92,13 @@ input,select,textarea{width:100%;padding:9px 12px;min-height:40px;border:1px sol
 body.dark input,body.dark select,body.dark textarea{background:#0b1222;border-color:#334155;color:#f1f5f9}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(49,87,232,0.14)}
 .field{margin-bottom:12px}
+.inline-add{display:flex;gap:6px;align-items:center}
+.inline-add select{flex:1;min-width:0}
+.inline-add button{margin:0;padding:8px 11px;min-height:40px;flex-shrink:0}
 
 button{border:0;border-radius:9px;padding:10px 16px;background:var(--brand);color:white;cursor:pointer;font-weight:600;font-size:13px;font-family:inherit;transition:all .18s}
 button:hover{background:#2444c7}
+button:disabled{opacity:.6;cursor:not-allowed}
 button.secondary{background:#e2e8f0;color:#1e293b}
 body.dark button.secondary{background:#1e293b;color:#f1f5f9;border:1px solid #334155}
 button.secondary:hover{background:#cbd5e1}
@@ -168,6 +172,7 @@ body.dark .status-paused{background:#1e293b;color:#94a3b8}
 .settings-panel.active{display:block}
 .card-add-box{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
 .code-box{background:#0f172a;color:#38bdf8;padding:14px;border-radius:10px;font-family:monospace;font-size:12px;overflow-x:auto;white-space:pre;margin:10px 0;border:1px solid #334155}
+.thumb-preview{width:46px;height:46px;border-radius:8px;object-fit:contain;border:1px solid var(--line);background:#fff;padding:2px;display:none}
 
 /* Chat */
 #liveChatPanel{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;min-height:480px}
@@ -216,18 +221,19 @@ body.dark .status-paused{background:#1e293b;color:#94a3b8}
   .profile-pill{padding:3px}
 }
 
-/* Print & Thermal 80mm POS */
+/* Print Rules (Invoice, Receipt, POS) */
 @media print{
   body{background:#fff!important;color:#000!important;height:auto!important;overflow:visible!important;display:block!important}
   aside,header,.noprint,.float-fab,#authOverlay,#toastContainer,#sidebarBackdrop{display:none!important}
   .app-container,main{height:auto!important;overflow:visible!important;padding:0!important;background:#fff!important}
-  body.printing-invoice main{display:none!important}
+  body.printing-invoice main,body.printing-receipt main{display:none!important}
   body.printing-invoice #invoiceModal{display:block!important;position:static!important;background:#fff!important;padding:0!important}
-  body.printing-invoice #invoiceModal .modal-box{box-shadow:none!important;border:0!important;width:100%!important;max-width:100%!important;max-height:none!important;padding:0!important;color:#000!important}
-  body.printing-pos #invoiceModal .modal-box{max-width:76mm!important;margin:0 auto!important;font-size:11px!important}
-  body:not(.printing-invoice) .modal-overlay{display:none!important}
-  body:not(.printing-invoice) main section:not(.active){display:none!important}
-  body:not(.printing-invoice) main section.active{display:block!important;border:0!important;box-shadow:none!important;padding:0!important}
+  body.printing-receipt #receiptModal{display:block!important;position:static!important;background:#fff!important;padding:0!important}
+  body.printing-invoice #invoiceModal .modal-box,body.printing-receipt #receiptModal .modal-box{box-shadow:none!important;border:0!important;width:100%!important;max-width:100%!important;max-height:none!important;padding:0!important;color:#000!important}
+  body.printing-pos #invoiceModal .modal-box,body.printing-pos #receiptModal .modal-box{max-width:76mm!important;margin:0 auto!important;font-size:11px!important}
+  body:not(.printing-invoice):not(.printing-receipt) .modal-overlay{display:none!important}
+  body:not(.printing-invoice):not(.printing-receipt) main section:not(.active){display:none!important}
+  body:not(.printing-invoice):not(.printing-receipt) main section.active{display:block!important;border:0!important;box-shadow:none!important;padding:0!important}
   table{font-size:11px!important}
   th{background:#f1f5f9!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
