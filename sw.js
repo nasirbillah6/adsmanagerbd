@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ads-hisab-pwa-v73';
+const CACHE_NAME = 'ads-hisab-pwa-v74';
 const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', e => {
