@@ -802,9 +802,6 @@ window.copyWorkBrief = workId => {
   const w = db.works.find(x => x.id === workId); if (!w) return;
   copyText(`📋 *ক্যাম্পেইন ব্রিফ: ${w.name}*\nক্লায়েন্ট: ${cname(w.customerId)} (${pname(w.pageId)})\nObjective: ${w.objective || '—'}\nবাজেট: ${usd(w.dollar)} (${w.days} দিন)\nলোকেশন: ${w.targetLoc || '—'} | বয়স/জেন্ডার: ${w.targetAge || '—'}\nঅডিয়েন্স: ${w.audience || '—'}\nপোস্ট লিংক: ${w.postUrl || w.creativeLink || '—'}\nক্যাপশন: ${w.adCopy || '—'}`, 'অ্যাড ব্রিফ');
 };
-এই নিন **`app.js` (অংশ ২/২ — শেষ অংশ)**। আপনার `app.js`-এর Part 1-এর ঠিক নিচে এটি পেস্ট করে সেভ করুন:
-
-```javascript
 // === PART 2 ===
 // Pixel & Ad Account Health + Meta API Sync
 function generatePixelCode() {
