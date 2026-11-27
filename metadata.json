@@ -1,0 +1,6 @@
+{
+  "name": "Ads হিসাব ম্যানেজার Pro",
+  "description": "Multi-platform Ads Agency OS (Meta, Google, YouTube, TikTok Ads) with client billing, CRM, cloud sync, and 1-click WhatsApp broadcast.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

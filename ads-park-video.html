@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ads Park BD Studio — Pro Motion Video & AI Voice Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link id="dynFontLink" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;700&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+Bengali:wght@500;700;800&family=Oswald:wght@600;700&family=Playfair+Display:wght@700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="./assets/mp4-muxer.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17;--surface:#111724;--surface-2:#171f30;--border:#232e42;
+    --ink:#f1f5f9;--muted:#94a3b8;--accent:#3b82f6;--accent-2:#10b981;
+    --danger:#ef4444;--warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans','Noto Sans Bengali',system-ui,sans-serif;font-size:13px;overflow-x:hidden}
+  .mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{border:1px solid var(--border);background:var(--surface-2);color:var(--ink);border-radius:8px;padding:7px 11px;font-weight:600;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex-shrink:0;transition:background .15s,border-color .15s,transform .12s}
+  button:hover{border-color:#475569;background:#1e293b}
+  button:active{transform:scale(.98)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#2563eb;border-color:#2563eb}
+  button.export-btn{background:var(--accent-2);border-color:var(--accent-2);color:#052e16;font-weight:700}
+  button.export-btn:hover{background:#059669;border-color:#059669;color:#fff}
+  button.danger-btn{border-color:rgba(239,68,68,.45);color:#fca5a5;background:rgba(239,68,68,.1)}
+  button.danger-btn:hover{background:rgba(239,68,68,.2)}
+  button.rec-live{background:#dc2626;border-color:#ef4444;color:#fff}
+
+  /* Top Bar Contract: 3 zones */
+  .topbar{height:56px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .brand{font-size:15px;font-weight:800;letter-spacing:-0.01em;white-space:nowrap;flex-shrink:0;color:#fff;text-decoration:none}
+  .top-center{display:flex;align-items:center;gap:8px;overflow-x:auto}
+  .seg-group{display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px}
+  .seg-btn{border:0;background:transparent;color:var(--muted);padding:5px 9px;border-radius:6px;font-size:12px}
+  .seg-btn.active{background:var(--surface-2);color:#fff}
+  .top-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+  /* Studio Shell */
+  .studio{display:grid;grid-template-columns:410px 1fr;grid-template-rows:1fr 224px;height:calc(100vh - 56px);min-height:640px}
+  @media(max-width:1080px){.studio{grid-template-columns:1fr;grid-template-rows:auto auto 230px;height:auto}}
+
+  /* Left Inspector */
+  .inspector{grid-row:1 / 3;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  @media(max-width:1080px){.inspector{grid-row:2;border-right:0;border-top:1px solid var(--border)}}
+  .insp-tabs{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--border);background:var(--bg);padding:5px;gap:3px}
+  .insp-tab{border:0;background:transparent;color:var(--muted);padding:7px 2px;border-radius:7px;font-size:11px;font-weight:700}
+  .insp-tab.active{background:var(--surface-2);color:#fff}
+  .insp-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .insp-panel{display:none;flex-direction:column;gap:11px}
+  .insp-panel.active{display:flex}
+
+  .sec-head{font-size:12px;font-weight:700;color:#cbd5e1;display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid var(--border)}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11.5px;font-weight:600;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+  .field input[type="text"],.field input[type="number"],.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px}
+  .field textarea{resize:vertical;min-height:56px}
+  .field input[type="range"]{width:100%;accent-color:var(--accent);cursor:pointer}
+  .field input[type="color"]{width:100%;height:32px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:2px;cursor:pointer}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
+  .swatch-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .swatch{height:34px;border-radius:8px;border:2px solid var(--border);cursor:pointer;padding:0}
+  .swatch.active{border-color:#fff;transform:scale(1.03)}
+
+  .kf-pills{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .kf-pill{border:1px solid var(--border);background:var(--bg);color:var(--muted);padding:7px 6px;border-radius:8px;font-size:11px}
+  .kf-pill.active{border-color:var(--warn);background:rgba(245,158,11,.14);color:#fde68a}
+
+  .scene-list{display:flex;flex-direction:column;gap:5px}
+  .scene-item{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer}
+  .scene-item.active{border-color:var(--accent);background:rgba(59,130,246,.12)}
+
+  .box-subtle{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+  .meter-bar{width:100%;height:8px;background:#0f172a;border-radius:99px;overflow:hidden;border:1px solid var(--border)}
+  .meter-fill{height:100%;width:0;background:linear-gradient(90deg,#10b981,#f59e0b,#ef4444);transition:width .05s linear}
+
+  /* Center Preview Viewport */
+  .viewport-area{background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:12px 16px;min-height:0}
+  .canvas-frame{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  canvas#stage{max-height:100%;max-width:100%;width:auto;height:auto;border-radius:12px;border:1px solid var(--border);box-shadow:0 18px 46px rgba(0,0,0,.6);background:#050811}
+  .transport{width:100%;max-width:820px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:10px;flex-wrap:wrap}
+  .transport-left,.transport-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .timecode{font-size:12px;color:#e2e8f0;background:var(--surface);border:1px solid var(--border);padding:6px 10px;border-radius:8px}
+  .meta-line{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+
+  /* Bottom NLE Timeline */
+  .timeline-dock{background:var(--surface);border-top:1px solid var(--border);display:flex;flex-direction:column;min-height:0;user-select:none}
+  .tl-toolbar{height:36px;padding:0 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tl-tracks{flex:1;overflow-x:auto;overflow-y:hidden;padding:8px 14px 10px;position:relative;display:flex;flex-direction:column;gap:5px}
+  .tl-ruler{height:18px;border-bottom:1px solid var(--border);position:relative;cursor:pointer;font-size:10px;color:var(--muted)}
+  .tl-track-row{display:flex;align-items:center;gap:8px;height:32px}
+  .tl-label{width:76px;flex-shrink:0;font-size:11px;font-weight:700;color:var(--muted)}
+  .tl-lane{flex:1;height:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;position:relative;display:flex;overflow:hidden;cursor:pointer}
+  .tl-clip{height:100%;border-right:1px solid var(--bg);padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;font-weight:600;color:#fff;overflow:hidden;white-space:nowrap;cursor:pointer}
+  .tl-clip.active{outline:2px solid #fff;outline-offset:-2px}
+  .kf-diamond{position:absolute;top:50%;width:11px;height:11px;background:var(--warn);border:1.5px solid #fff;transform:translate(-50%,-50%) rotate(45deg);cursor:pointer;z-index:2}
+  .kf-diamond.active{background:#fff;border-color:var(--warn);transform:translate(-50%,-50%) rotate(45deg) scale(1.25)}
+  .tl-playhead{position:absolute;top:6px;bottom:6px;width:2px;background:#ef4444;pointer-events:none;z-index:10}
+  .tl-playhead::before{content:'';position:absolute;top:-2px;left:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #ef4444}
+
+  /* Modals */
+  .modal-back{position:fixed;inset:0;background:rgba(2,6,23,.8);display:none;align-items:center;justify-content:center;padding:16px;z-index:100}
+  .modal-card{width:min(760px,100%);background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow-y:auto}
+  .prog-track{height:8px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border)}
+  .prog-bar{height:100%;width:0;background:var(--accent-2);transition:width .08s linear}
+  .tpl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+  .tpl-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;cursor:pointer;text-align:left}
+  .tpl-card:hover{border-color:var(--accent)}
+  .asset-link{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--ink);text-decoration:none}
+  .asset-link:hover{border-color:var(--accent)}
+  .status-msg{font-size:12px;color:#93c5fd;min-height:16px}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./ads-park-video.html" class="brand">Ads Park BD Studio</a>
+  <div class="top-center">
+    <div class="seg-group" role="group" aria-label="Aspect Ratio">
+      <button type="button" class="seg-btn active" data-ratio="9:16" onclick="setRatio('9:16')">9:16 Reels</button>
+      <button type="button" class="seg-btn" data-ratio="1:1" onclick="setRatio('1:1')">1:1 Feed</button>
+      <button type="button" class="seg-btn" data-ratio="16:9" onclick="setRatio('16:9')">16:9 Wide</button>
+    </div>
+    <button type="button" onclick="openModal('libraryModal')">🌐 ফ্রি টেমপ্লেট, AI ও অনলাইন লাইব্রেরি</button>
+    <button type="button" onclick="undoHistory()" title="Undo (Ctrl+Z)">↩ Undo</button>
+    <select id="previewQualSel" onchange="setPreviewQuality(this.value)" title="প্রিভিউ স্পিড ও কোয়ালিটি" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:11.5px;font-weight:600">
+      <option value="0.5" selected>⚡ Fast Preview (540p · ৬০ FPS স্মুথ)</option>
+      <option value="0.6667">🔥 Smooth Preview (720p HD)</option>
+      <option value="1">💎 Full Resolution (1080p)</option>
+    </select>
+  </div>
+  <div class="top-actions">
+    <button type="button" onclick="downloadThumbnail()">📸 থাম্বনেইল</button>
+    <button type="button" onclick="goBackToMainApp()">অ্যাপে ফিরুন</button>
+    <button type="button" class="export-btn" onclick="openExportModal()">Export HD Video</button>
+  </div>
+</header>
+
+<div class="studio">
+  <!-- LEFT INSPECTOR -->
+  <aside class="inspector">
+    <div class="insp-tabs" role="tablist">
+      <button type="button" class="insp-tab active" data-tab="scenes" onclick="switchTab('scenes')">সিন</button>
+      <button type="button" class="insp-tab" data-tab="style" onclick="switchTab('style')">ফন্ট</button>
+      <button type="button" class="insp-tab" data-tab="fx" onclick="switchTab('fx')">ইফেক্ট</button>
+      <button type="button" class="insp-tab" data-tab="color" onclick="switchTab('color')">কালার</button>
+      <button type="button" class="insp-tab" data-tab="voice" onclick="switchTab('voice')">🎙️ ভয়েস</button>
+    </div>
+
+    <div class="insp-body">
+      <!-- TAB 1: SCENES & MEDIA -->
+      <div id="tab-scenes" class="insp-panel active">
+        <div class="sec-head">
+          <span>সিন ও স্টোরিবোর্ড</span>
+          <div style="display:flex;gap:4px">
+            <button type="button" style="padding:4px 7px;font-size:11px" onclick="addScene()">+ সিন</button>
+            <button type="button" style="padding:4px 7px;font-size:11px" onclick="duplicateScene()">কপি</button>
+            <button type="button" style="padding:4px 7px;font-size:11px" onclick="moveScene(-1)" title="Move Up">▲</button>
+            <button type="button" style="padding:4px 7px;font-size:11px" onclick="moveScene(1)" title="Move Down">▼</button>
+          </div>
+        </div>
+        <div class="scene-list" id="sceneList"></div>
+
+        <div class="sec-head">
+          <span id="edSceneTitle">সিন এডিটর</span>
+          <button type="button" class="danger-btn" style="padding:3px 8px;font-size:11px" onclick="deleteActiveScene()">মুছুন</button>
+        </div>
+
+        <div class="grid-2">
+          <div class="field"><label>সিনের নাম</label><input type="text" id="scName" oninput="updateActiveScene('name',this.value)"></div>
+          <div class="field"><label>সময় <span class="mono" id="scDurVal">5s</span></label><input type="range" id="scDur" min="2" max="15" step="0.5" oninput="updateActiveScene('dur',parseFloat(this.value))"></div>
+        </div>
+        <div class="field"><label>কিকার / ছোট হেডার</label><input type="text" id="scKicker" oninput="updateActiveScene('kicker',this.value)"></div>
+        <div class="field"><label>মূল হেডলাইন (Headline)</label><textarea id="scHead" oninput="updateActiveScene('headline',this.value)"></textarea></div>
+        <div class="field"><label>সাবটাইটেল / বুলেট</label><textarea id="scSub" rows="2" oninput="updateActiveScene('sub',this.value)"></textarea></div>
+        <div class="grid-2">
+          <div class="field"><label>CTA / নিচের বাটন</label><input type="text" id="scCta" oninput="updateActiveScene('cta',this.value)"></div>
+          <div class="field"><label>ড্যাশবোর্ড উইজেট কার্ড</label>
+            <select id="scWidget" onchange="updateActiveScene('widget',this.value)">
+              <option value="none">None (Clean)</option>
+              <option value="roas">📊 +320% Reach & ROAS Bar</option>
+              <option value="trust">✅ Verified Agency Trust</option>
+              <option value="offer">🔥 Limited Offer Tag</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="box-subtle">
+          <label style="font-size:11.5px;font-weight:700;color:#cbd5e1">🎬 সিন ব্যাকগ্রাউন্ড (ছবি বা ফ্রি স্টক MP4 ভিডিও)</label>
+          <div style="display:flex;gap:6px">
+            <input type="file" id="scMediaInput" accept="image/*,video/*" style="flex:1;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px">
+            <button type="button" style="padding:5px 8px;font-size:11px" onclick="clearSceneMedia()">সরান</button>
+          </div>
+          <div class="field"><label>মিডিয়া অপাটিসি <span class="mono" id="scImgOpVal">35%</span></label><input type="range" id="scImgOp" min="0" max="1" step="0.05" oninput="updateActiveScene('imgOpacity',parseFloat(this.value))"></div>
+        </div>
+      </div>
+
+      <!-- TAB 2: TYPOGRAPHY & BRAND -->
+      <div id="tab-style" class="insp-panel">
+        <div class="sec-head"><span>ব্র্যান্ড পরিচিতি</span></div>
+        <div class="grid-2">
+          <div class="field"><label>ব্র্যান্ড (EN)</label><input type="text" id="gBrandEn" value="Ads Park BD" oninput="renderOnce()"></div>
+          <div class="field"><label>ব্র্যান্ড (BN)</label><input type="text" id="gBrandBn" value="এডস পার্ক বিডি" oninput="renderOnce()"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>WhatsApp / ফোন</label><input type="text" id="gPhone" value="01XXX-XXXXXX" oninput="renderOnce()"></div>
+          <div class="field"><label>ওয়াটারমার্ক</label>
+            <select id="gWatermarkPos" onchange="renderOnce()">
+              <option value="top">উপরে মাঝখানে</option>
+              <option value="bottom">নিচে বামে</option>
+              <option value="hidden">লুকানো</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>ব্র্যান্ড লোগো (PNG/JPG)</label>
+          <div style="display:flex;gap:6px">
+            <input type="file" id="gLogoInput" accept="image/*" style="flex:1;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px">
+            <button type="button" style="padding:5px 8px;font-size:11px" onclick="clearBrandLogo()">সরান</button>
+          </div>
+        </div>
+
+        <div class="sec-head"><span>টাইপোগ্রাফি ও ফ্রি Google Font</span></div>
+        <div class="grid-2">
+          <div class="field"><label>ফন্ট ফ্যামিলি</label>
+            <select id="gFont" onchange="renderOnce()">
+              <option value="Noto Sans Bengali">Noto Sans Bengali</option>
+              <option value="Hind Siliguri">Hind Siliguri</option>
+              <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+              <option value="Oswald">Oswald Bold</option>
+              <option value="Playfair Display">Playfair Luxury</option>
+            </select>
+          </div>
+          <div class="field"><label>অ্যালাইনমেন্ট</label>
+            <select id="gAlign" onchange="renderOnce()">
+              <option value="center">Center</option>
+              <option value="left">Left Editorial</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>অনলাইন Google Font যোগ করুন (ফ্রি)</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="customGoogleFont" placeholder="যেমন: Mina, Galada, Poppins">
+            <button type="button" onclick="loadGoogleFont()">লোড</button>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>হেডলাইন সাইজ <span class="mono" id="gHeadSizeVal">64px</span></label><input type="range" id="gHeadSize" min="38" max="92" value="64" oninput="document.getElementById('gHeadSizeVal').textContent=this.value+'px';renderOnce()"></div>
+          <div class="field"><label>টেক্সট শ্যাডো <span class="mono" id="gShadowVal">65%</span></label><input type="range" id="gShadow" min="0" max="100" value="65" oninput="document.getElementById('gShadowVal').textContent=this.value+'%';renderOnce()"></div>
+        </div>
+        <div class="field"><label>কার্ড ব্যাকড্রপ স্টাইল</label>
+          <select id="gCardStyle" onchange="renderOnce()">
+            <option value="glass">Glass Frost + Shine</option>
+            <option value="solid">Dark Solid Neon Edge</option>
+            <option value="minimal">Clean No Box</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- TAB 3: EFFECTS & KEYFRAMES -->
+      <div id="tab-fx" class="insp-panel">
+        <div class="sec-head"><span>অ্যানিমেশন ও ট্রানজিশন</span></div>
+        <div class="grid-2">
+          <div class="field"><label>টেক্সট অ্যানিমেশন</label>
+            <select id="scAnim" onchange="updateActiveScene('anim',this.value)">
+              <option value="rise">Fade & Rise Up</option>
+              <option value="slide">Slide Left Kinetic</option>
+              <option value="pop">Elastic Zoom Pop</option>
+              <option value="wordpop">Word-by-Word Pop</option>
+              <option value="type">Typewriter Reveal</option>
+              <option value="blur">Focus Blur In</option>
+              <option value="glitch">RGB Glitch Intro</option>
+            </select>
+          </div>
+          <div class="field"><label>সিন ট্রানজিশন</label>
+            <select id="scTrans" onchange="updateActiveScene('trans',this.value)">
+              <option value="fade">Smooth Crossfade</option>
+              <option value="wipe">Directional Wipe</option>
+              <option value="zoom">Zoom Cut</option>
+              <option value="flash">Light Flash Cut</option>
+              <option value="curtain">Split Curtain</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sec-head"><span>কীফ্রেম অ্যানিমেশন (Keyframe Motion)</span></div>
+        <div class="kf-pills" id="kfButtons">
+          <button type="button" class="kf-pill active" data-kf="0" onclick="selectKeyframe(0)">◆ Start (0%)</button>
+          <button type="button" class="kf-pill" data-kf="1" onclick="selectKeyframe(1)">◆ Mid (50%)</button>
+          <button type="button" class="kf-pill" data-kf="2" onclick="selectKeyframe(2)">◆ End (100%)</button>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Scale <span class="mono" id="kfScaleVal">1.00x</span></label><input type="range" id="kfScale" min="0.7" max="1.45" step="0.02" oninput="updateKeyframe('scale',parseFloat(this.value))"></div>
+          <div class="field"><label>X-Offset <span class="mono" id="kfXVal">0px</span></label><input type="range" id="kfX" min="-160" max="160" step="2" oninput="updateKeyframe('x',parseFloat(this.value))"></div>
+          <div class="field"><label>Y-Offset <span class="mono" id="kfYVal">0px</span></label><input type="range" id="kfY" min="-160" max="160" step="2" oninput="updateKeyframe('y',parseFloat(this.value))"></div>
+          <div class="field"><label>Rotation <span class="mono" id="kfRotVal">0°</span></label><input type="range" id="kfRot" min="-15" max="15" step="0.5" oninput="updateKeyframe('rot',parseFloat(this.value))"></div>
+          <div class="field"><label>Opacity <span class="mono" id="kfOpVal">100%</span></label><input type="range" id="kfOp" min="0" max="1" step="0.05" oninput="updateKeyframe('opacity',parseFloat(this.value))"></div>
+          <div class="field"><label>Easing Curve</label>
+            <select id="scEase" onchange="updateActiveScene('ease',this.value)">
+              <option value="easeOut">Ease Out Cubic</option>
+              <option value="spring">Spring Bounce</option>
+              <option value="linear">Linear Constant</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sec-head"><span>ভিজ্যুয়াল ইফেক্ট (VFX Overlays)</span></div>
+        <div class="grid-2">
+          <div class="field"><label>পার্টিকেল ইফেক্ট</label>
+            <select id="gParticles" onchange="renderOnce()">
+              <option value="orbs">Floating Orbs</option>
+              <option value="sparks">Growth Sparks</option>
+              <option value="bokeh">Cinema Bokeh Lights</option>
+              <option value="grid">Animated Tech Grid</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="field"><label>ফ্রেম রেট (FPS)</label>
+            <select id="gFps" onchange="setRatio(aspectRatio)">
+              <option value="30">30 FPS (Standard)</option>
+              <option value="60">60 FPS (Ultra Smooth)</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="gShine" checked onchange="renderOnce()"> Shine Sweep Light</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="gCinema" onchange="renderOnce()"> Cinema 2.39:1 Matte</label>
+        </div>
+        <div class="grid-3">
+          <div class="field"><label>Vignette <span class="mono" id="gVigVal">35%</span></label><input type="range" id="gVig" min="0" max="90" value="35" oninput="document.getElementById('gVigVal').textContent=this.value+'%';renderOnce()"></div>
+          <div class="field"><label>Glow <span class="mono" id="gGlowVal">50%</span></label><input type="range" id="gGlow" min="0" max="100" value="50" oninput="document.getElementById('gGlowVal').textContent=this.value+'%';renderOnce()"></div>
+          <div class="field"><label>Grain <span class="mono" id="gGrainVal">12%</span></label><input type="range" id="gGrain" min="0" max="45" value="12" oninput="document.getElementById('gGrainVal').textContent=this.value+'%';renderOnce()"></div>
+        </div>
+      </div>
+
+      <!-- TAB 4: COLOR GRADING & SAVE -->
+      <div id="tab-color" class="insp-panel">
+        <div class="sec-head"><span>প্রো কালার LUT প্যালেট</span></div>
+        <div class="swatch-grid" id="swatchGrid"></div>
+        <div class="grid-2">
+          <div class="field"><label>BG Color 1</label><input type="color" id="scBg1" oninput="updateActiveScene('bg1',this.value)"></div>
+          <div class="field"><label>BG Color 2</label><input type="color" id="scBg2" oninput="updateActiveScene('bg2',this.value)"></div>
+          <div class="field"><label>Accent Color</label><input type="color" id="scAcc" oninput="updateActiveScene('accent',this.value)"></div>
+          <div class="field"><label>Text Color</label><input type="color" id="scTxt" oninput="updateActiveScene('textColor',this.value)"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Brightness <span class="mono" id="gBriVal">100%</span></label><input type="range" id="gBri" min="70" max="135" value="100" oninput="document.getElementById('gBriVal').textContent=this.value+'%';markConfigDirty();renderOnce()"></div>
+          <div class="field"><label>Contrast <span class="mono" id="gConVal">100%</span></label><input type="range" id="gCon" min="75" max="145" value="100" oninput="document.getElementById('gConVal').textContent=this.value+'%';markConfigDirty();renderOnce()"></div>
+          <div class="field"><label>Saturation <span class="mono" id="gSatVal">100%</span></label><input type="range" id="gSat" min="50" max="165" value="100" oninput="document.getElementById('gSatVal').textContent=this.value+'%';markConfigDirty();renderOnce()"></div>
+          <div class="field"><label>Hue Shift <span class="mono" id="gHueVal">0°</span></label><input type="range" id="gHue" min="-45" max="45" value="0" oninput="document.getElementById('gHueVal').textContent=this.value+'°';markConfigDirty();renderOnce()"></div>
+        </div>
+
+        <div class="sec-head"><span>প্রজেক্ট সেভ ও রিস্টোর</span></div>
+        <div class="grid-2">
+          <button type="button" onclick="saveProjectLocal()">💾 প্রজেক্ট সেভ করুন</button>
+          <button type="button" onclick="loadProjectLocal()">📂 সেভ প্রজেক্ট আনুন</button>
+        </div>
+        <div class="status-msg" id="saveStatus"></div>
+      </div>
+
+      <!-- TAB 5: VOICE RECORDER, OWN-VOICE STUDIO & AI VOICE MAKER -->
+      <div id="tab-voice" class="insp-panel">
+        <!-- 1. Mic Record + Own Voice Enhancer -->
+        <div class="box-subtle">
+          <div class="sec-head" style="border:0;padding:0">
+            <span>🎙️ নিজের কণ্ঠ রেকর্ড ও AI স্টুডিও এনহ্যান্সার</span>
+            <span class="mono" id="recTimer" style="color:var(--warn)">00:00</span>
+          </div>
+          <div class="meter-bar"><div class="meter-fill" id="micMeter"></div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" id="btnRecToggle" class="primary" onclick="toggleMicRecord()">🎙️ রেকর্ড শুরু</button>
+            <button type="button" onclick="previewVoiceTrack()">▶ কণ্ঠ শুনুন</button>
+            <button type="button" class="danger-btn" onclick="clearVoiceTrack()">মুছুন</button>
+          </div>
+          <div class="field">
+            <label>নিজের কণ্ঠের AI সাউন্ড প্রিসেট (Studio Voice EQ)</label>
+            <select id="voPreset" onchange="applyVoicePreset(this.value)">
+              <option value="studio">🎙️ Studio Broadcast (Warm + Clear)</option>
+              <option value="deep">⚡ Deep Ad Narrator (গভীর ও গম্ভীর)</option>
+              <option value="bright">🎬 Crisp Reels Creator (উজ্জ্বল ও স্পষ্ট)</option>
+              <option value="fast">🚀 Energetic Promo (1.10x দ্রুত)</option>
+              <option value="orig">Original Raw Voice</option>
+            </select>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Speed/Pitch <span class="mono" id="voRateVal">1.00x</span></label><input type="range" id="voRate" min="0.8" max="1.25" step="0.02" value="1.0" oninput="document.getElementById('voRateVal').textContent=parseFloat(this.value).toFixed(2)+'x'"></div>
+            <div class="field"><label>Voice Volume <span class="mono" id="voVolVal">100%</span></label><input type="range" id="voVol" min="0" max="150" value="100" oninput="document.getElementById('voVolVal').textContent=this.value+'%'"></div>
+            <div class="field"><label>Warmth Bass <span class="mono" id="voBassVal">+4dB</span></label><input type="range" id="voBass" min="-6" max="12" value="4" oninput="document.getElementById('voBassVal').textContent=(this.value>=0?'+':'')+this.value+'dB'"></div>
+            <div class="field"><label>Clarity Boost <span class="mono" id="voClarityVal">+5dB</span></label><input type="range" id="voClarity" min="-6" max="12" value="5" oninput="document.getElementById('voClarityVal').textContent=(this.value>=0?'+':'')+this.value+'dB'"></div>
+          </div>
+          <div class="field">
+            <label>অথবা ভয়েস ফাইল আপলোড (MP3/WAV)</label>
+            <input type="file" id="voUploadInput" accept="audio/*" style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px">
+          </div>
+          <div class="status-msg" id="voiceStatus">কোনো ভয়েসওভার সেট করা নেই</div>
+        </div>
+
+        <!-- 2. Gemini AI Voice Maker -->
+        <div class="box-subtle">
+          <div class="sec-head" style="border:0;padding:0">
+            <span>🤖 AI Voice Maker (Gemini AI ভয়েস)</span>
+            <button type="button" style="padding:3px 7px;font-size:11px" onclick="fillVoiceScriptFromScenes()">সিন টেক্সট বসান</button>
+          </div>
+          <div class="field"><label>AI যা বলবে (বাংলা বা ইংরেজি স্ক্রিপ্ট লিখুন)</label><textarea id="aiTtsText" rows="3" placeholder="যেমন: বুস্ট করছেন, কিন্তু অর্ডার আসছে না? এখনি যোগাযোগ করুন এডস পার্ক বিডি-তে!"></textarea></div>
+          <div class="grid-2">
+            <div class="field"><label>AI ভয়েস আর্টিস্ট</label>
+              <select id="aiVoiceName">
+                <option value="Kore">Kore (Clear & Crisp)</option>
+                <option value="Charon">Charon (Deep Authority)</option>
+                <option value="Puck">Puck (Energetic Promo)</option>
+                <option value="Fenrir">Fenrir (Bold Strong)</option>
+                <option value="Zephyr">Zephyr (Warm Friendly)</option>
+              </select>
+            </div>
+            <div class="field"><label>ভয়েস টোন/স্টাইল</label><input type="text" id="aiVoiceStyle" value="Energetic, confident Bangladeshi digital marketing ad narrator"></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="primary" id="btnGenAiVoice" onclick="generateAiVoice()">✨ AI ভয়েস তৈরি ও যুক্ত করুন</button>
+            <button type="button" id="btnDlAiVoice" onclick="downloadVoiceWav()" disabled>⬇️ WAV</button>
+          </div>
+          <div class="status-msg" id="aiTtsStatus"></div>
+        </div>
+
+        <!-- 3. Background Music + Auto Duck -->
+        <div class="box-subtle">
+          <div class="sec-head" style="border:0;padding:0"><span>🎵 ব্যাকগ্রাউন্ড মিউজিক ও মিক্সিং</span></div>
+          <div class="grid-2">
+            <div class="field"><label>মিউজিক ট্র্যাক</label>
+              <select id="gAudioMode" onchange="drawAudioLanes()">
+                <option value="upbeat">Upbeat Promo Beat</option>
+                <option value="pulse">Modern Agency Pulse</option>
+                <option value="ambient">Clean Corporate Pad</option>
+                <option value="custom">নিজস্ব MP3 মিউজিক</option>
+                <option value="mute">মিউজিক বন্ধ (Silent)</option>
+              </select>
+            </div>
+            <div class="field"><label>Music Volume <span class="mono" id="gVolVal">55%</span></label><input type="range" id="gVol" min="0" max="100" value="55" oninput="updateMusicVol(this.value)"></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="gAutoDuck" checked> Auto-Duck Music (ভয়েস চললে মিউজিক অটো কমবে)</label>
+          <input type="file" id="gAudioInput" accept="audio/*" style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px">
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER VIEWPORT -->
+  <main class="viewport-area">
+    <div class="canvas-frame">
+      <canvas id="stage" width="1080" height="1920"></canvas>
+    </div>
+    <div class="transport">
+      <div class="transport-left">
+        <button type="button" onclick="seekTo(0)" title="Start">⏮</button>
+        <button type="button" class="primary" id="btnPlay" onclick="togglePlay()">▶ Play</button>
+        <button type="button" onclick="nextScene()" title="Next Scene">⏭</button>
+        <button type="button" id="btnLoop" onclick="toggleLoop()">Loop: On</button>
+        <button type="button" id="btnSafe" onclick="toggleSafeZone()">Safe Zone: Off</button>
+      </div>
+      <div class="transport-right">
+        <span class="timecode mono" id="timeDisplay">00:00.0 / 00:22.0</span>
+        <span class="meta-line mono" id="resLabel">1080x1920 · 30fps</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- BOTTOM 4-LANE TIMELINE -->
+  <section class="timeline-dock" aria-label="Video Timeline">
+    <div class="tl-toolbar">
+      <div class="meta-line">
+        <strong>Timeline</strong>
+        <span>·</span>
+        <span id="tlSummary">4 Scenes · 22.0s</span>
+      </div>
+      <div class="meta-line">
+        <span>সিন বা ডায়মন্ড (◆) ক্লিক করে এডিট করুন · রুলারে ক্লিক করে স্ক্রাব করুন</span>
+      </div>
+    </div>
+    <div class="tl-tracks" id="tlTracks">
+      <div class="tl-ruler mono" id="tlRuler" onclick="scrubClick(event)"></div>
+      <div class="tl-track-row">
+        <div class="tl-label">Scenes</div>
+        <div class="tl-lane" id="tlSceneLane"></div>
+      </div>
+      <div class="tl-track-row">
+        <div class="tl-label">Keyframes</div>
+        <div class="tl-lane" id="tlKfLane" style="background:rgba(245,158,11,.05)"></div>
+      </div>
+      <div class="tl-track-row">
+        <div class="tl-label">Voiceover</div>
+        <div class="tl-lane" id="tlVoiceLane" onclick="scrubClick(event)"><canvas id="voiceWaveCanvas" style="width:100%;height:100%;display:block"></canvas></div>
+      </div>
+      <div class="tl-track-row">
+        <div class="tl-label">Music</div>
+        <div class="tl-lane" id="tlAudioLane" onclick="scrubClick(event)"><canvas id="audioWaveCanvas" style="width:100%;height:100%;display:block"></canvas></div>
+      </div>
+      <div class="tl-playhead" id="tlPlayhead" style="left:98px"></div>
+    </div>
+  </section>
+</div>
+
+<!-- FREE TEMPLATES, AI WRITER & ONLINE ASSETS MODAL -->
+<div id="libraryModal" class="modal-back">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 style="margin:0;font-size:16px">🌐 ফ্রি টেমপ্লেট, AI স্ক্রিপ্ট ও অনলাইন অ্যাসেট হাব</h3>
+      <button type="button" onclick="closeModal('libraryModal')">✕</button>
+    </div>
+
+    <div class="seg-group" style="width:fit-content">
+      <button type="button" class="seg-btn active" id="libTabTpl" onclick="switchLibTab('tpl')">🎬 ফ্রি ভিডিও টেমপ্লেট (৮টি)</button>
+      <button type="button" class="seg-btn" id="libTabAi" onclick="switchLibTab('ai')">✨ AI স্টোরিবোর্ড মেকার</button>
+      <button type="button" class="seg-btn" id="libTabOnline" onclick="switchLibTab('online')">🌐 অনলাইন ফ্রি ভিডিও/মিউজিক</button>
+    </div>
+
+    <!-- Lib 1: 8 Pro Templates -->
+    <div id="libPanelTpl" class="tpl-grid"></div>
+
+    <!-- Lib 2: AI Storyboard Generator -->
+    <div id="libPanelAi" style="display:none;flex-direction:column;gap:10px">
+      <div class="field"><label>আপনার প্রোডাক্ট বা বিজ্ঞাপনের বিষয় লিখুন</label><textarea id="aiPromptTopic" rows="3" placeholder="যেমন: Ads Park BD — ঈদ স্পেশাল Meta Ads প্যাকেজ, ফ্রি পিক্সেল সেটআপ ও ডেইলি রিপোর্ট"></textarea></div>
+      <button type="button" class="primary" id="btnGenAiStory" onclick="generateAiStoryboard()">✨ AI দিয়ে ৪ সিনের পুরো ভিডিও তৈরি করুন</button>
+      <div class="status-msg" id="aiStoryStatus"></div>
+    </div>
+
+    <!-- Lib 3: Free Online Stock Resources -->
+    <div id="libPanelOnline" style="display:none;flex-direction:column;gap:8px">
+      <p style="margin:0;color:var(--muted);line-height:1.5">নিচের ১০০% ফ্রি ও কপিরাইট-মুক্ত সাইটগুলো থেকে আপনার পছন্দের স্টক ভিডিও (MP4), ছবি, সাউন্ড ইফেক্ট (SFX) বা মিউজিক ডাউনলোড করে সরাসরি বাম পাশের <strong>“সিন”</strong> বা <strong>“🎙️ ভয়েস”</strong> ট্যাবে আপলোড করুন:</p>
+      <a class="asset-link" href="https://www.pexels.com/videos/" target="_blank" rel="noopener noreferrer"><span>🎥 Pexels Free Stock Videos (4K / Reels MP4)</span><span>খুলুন ↗</span></a>
+      <a class="asset-link" href="https://pixabay.com/music/" target="_blank" rel="noopener noreferrer"><span>🎵 Pixabay Free Copyright-Free Music & SFX</span><span>খুলুন ↗</span></a>
+      <a class="asset-link" href="https://mixkit.co/free-stock-video/" target="_blank" rel="noopener noreferrer"><span>✨ Mixkit Free Transitions, Motion & Stock Clips</span><span>খুলুন ↗</span></a>
+      <a class="asset-link" href="https://unsplash.com/" target="_blank" rel="noopener noreferrer"><span>🖼️ Unsplash High-Res Free Photos</span><span>খুলুন ↗</span></a>
+      <a class="asset-link" href="https://fonts.google.com/?subset=bengali" target="_blank" rel="noopener noreferrer"><span>🔤 Google Fonts (Bangla & Display Fonts)</span><span>খুলুন ↗</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="exportModal" class="modal-back">
+  <div class="modal-card" style="width:min(540px,100%)">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 style="margin:0;font-size:16px">Export HD Video (Canvas + Voice + Music)</h3>
+      <button type="button" onclick="closeModal('exportModal')">✕</button>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label>ভিডিও ফরম্যাট</label>
+        <select id="expFormat" onchange="updateExportMeta()">
+          <option value="mp4" selected>🎬 MP4 (H.264 · iPhone / WhatsApp / FB Ready)</option>
+          <option value="webm">⚡ WebM (VP8/VP9 · ব্রাউজার রেকর্ডার)</option>
+        </select>
+      </div>
+      <div class="field"><label>এক্সপোর্ট রেজোলিউশন ও স্পিড</label>
+        <select id="expResScale" onchange="updateExportMeta()">
+          <option value="0.6667" selected>⚡ Fast HD 720p (৩x দ্রুত রেন্ডার · সুপার স্মুথ)</option>
+          <option value="1">💎 Ultra Full HD 1080p (সর্বোচ্চ মান)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>ভিডিও কোয়ালিটি (Bitrate)</label>
+      <select id="expBitrate">
+        <option value="4500000" selected>Balanced Ads Ready (4.5 Mbps · দ্রুত)</option>
+        <option value="8000000">Ultra HD (8 Mbps)</option>
+        <option value="2500000">Fast Small Size (2.5 Mbps)</option>
+      </select>
+    </div>
+    <div class="prog-track"><div class="prog-bar" id="expProgBar"></div></div>
+    <div class="mono" id="expStatus" style="font-size:12px;color:#93c5fd">প্রস্তুত — রেন্ডার চলাকালীন এই ট্যাবটি খোলা রাখবেন।</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button type="button" onclick="closeModal('exportModal')">বন্ধ</button>
+      <button type="button" class="export-btn" id="btnStartExport" onclick="startVideoExport()">🎬 Start Render & Download</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const PROJECT_STORAGE_KEY = 'ads_park_bd_video_project_v2';
+
+const COLOR_PRESETS = [
+  { name: 'Crimson Hook', bg1: '#1a0a14', bg2: '#3b0d22', acc: '#ef4444', txt: '#ffffff' },
+  { name: 'Royal Agency', bg1: '#09152b', bg2: '#1e3a8a', acc: '#3b82f6', txt: '#ffffff' },
+  { name: 'Emerald ROI', bg1: '#05261e', bg2: '#065f46', acc: '#10b981', txt: '#ffffff' },
+  { name: 'Teal Orange', bg1: '#071e26', bg2: '#164e63', acc: '#f97316', txt: '#ffffff' },
+  { name: 'Golden Luxury', bg1: '#181308', bg2: '#3b2c0a', acc: '#eab308', txt: '#ffffff' },
+  { name: 'Cyber Violet', bg1: '#160b2b', bg2: '#4c1d95', acc: '#a855f7', txt: '#ffffff' },
+  { name: 'Matte Noir', bg1: '#09090b', bg2: '#27272a', acc: '#e4e4e7', txt: '#ffffff' },
+  { name: 'Rose Promo', bg1: '#230918', bg2: '#831843', acc: '#ec4899', txt: '#ffffff' }
+];
+
+const TEMPLATE_META = [
+  { id: 'promo', title: '🔥 Ads Park BD ক্লায়েন্ট হান্টিং', desc: '৪ সিনের প্রো এজেন্সি মার্কেটিং অ্যাড', badge: 'Reels / Agency' },
+  { id: 'boost', title: '💳 ডলার বুস্টিং ও কার্ড সল্যুশন', desc: 'অ্যাকাউন্ট সমস্যা ও ডলার রেট অফার', badge: 'Dollar Boost' },
+  { id: 'roas', title: '📈 ROAS ও সেলস কেস স্টাডি', desc: 'লাইভ গ্রোথ চার্ট উইজেটসহ রেজাল্ট অ্যাড', badge: 'ROAS Proof' },
+  { id: 'fcom', title: '🛍️ F-Commerce / ফ্যাশন শপ', desc: 'পণ্য, ডিসকাউন্ট ও ক্যাশ অন ডেলিভারি', badge: 'E-Commerce' },
+  { id: 'tech', title: '💻 গ্যাজেট / ফ্ল্যাশ সেল', desc: 'হাই-এনার্জি গ্লিচ ও ফ্ল্যাশ টেক অফার', badge: 'Tech / Gadget' },
+  { id: 'eid', title: '⚡ মেগা ডিসকাউন্ট / ক্যাম্পেইন', desc: 'সীমিত সময়ের অফার ও আর্জেন্সি CTA', badge: 'Urgency Offer' },
+  { id: 'edu', title: '🎓 কোর্স / কোচিং ভর্তি অ্যাড', desc: 'ভর্তি চলছে + ফ্রি সেমিনার লিড জেনারেশন', badge: 'Education' },
+  { id: 'real', title: '🏠 রিয়েল এস্টেট / শোরুম প্রোমো', desc: 'লাক্সারি গোল্ড ও ক্লিন কর্পোরেট লুক', badge: 'Luxury Brand' }
+];
+
+function mkScene(o) {
+  return {
+    name: o.name || 'Scene', dur: o.dur || 5, kicker: o.kicker || '', headline: o.headline || '',
+    sub: o.sub || '', cta: o.cta || '', widget: o.widget || 'none',
+    anim: o.anim || 'rise', trans: o.trans || 'fade', ease: o.ease || 'easeOut',
+    bg1: o.bg1 || '#09152b', bg2: o.bg2 || '#1e3a8a', accent: o.accent || '#3b82f6', textColor: o.textColor || '#ffffff',
+    media: null, mediaType: null, imgOpacity: o.imgOpacity ?? 0.35,
+    keyframes: o.keyframes || [
+      { scale: 0.92, x: 0, y: 28, opacity: 0.25, rot: 0 },
+      { scale: 1.0, x: 0, y: 0, opacity: 1, rot: 0 },
+      { scale: 1.05, x: 0, y: -8, opacity: 1, rot: 0 }
+    ]
+  };
+}
+
+const TEMPLATES = {
+  promo: [
+    mkScene({ name: '01 · Hook', dur: 5, kicker: 'ডিজিটাল মার্কেটিং সতর্কতা', headline: 'বুস্ট করছেন,\nকিন্তু অর্ডার আসছে না?', sub: 'ডলার খরচ হচ্ছে ঠিকই, তবুও সেলস কম?\nশুধু Boost নয় — দরকার সঠিক Strategy', cta: 'অকারণে ডলার নষ্ট বন্ধ করুন', anim: 'rise', trans: 'fade', bg1: '#1a0a14', bg2: '#3b0d22', accent: '#ef4444' }),
+    mkScene({ name: '02 · Problem', dur: 5.5, kicker: 'কেন রেজাল্ট আসে না?', headline: 'ভুল টার্গেটিংয়ে\nবাজেট শেষ!', sub: '❌ ক্রেতা ছাড়া অপ্রাসঙ্গিক মানুষের কাছে রিচ\n❌ Pixel ও CAPI ট্র্যাকিং সেটআপ না থাকা\n❌ বাজেটের স্বচ্ছ হিসাব না পাওয়া', cta: 'সঠিক অডিয়েন্সই সফলতার চাবি', anim: 'slide', trans: 'wipe', bg1: '#1c1206', bg2: '#3f1d06', accent: '#f59e0b' }),
+    mkScene({ name: '03 · Solution', dur: 6.5, kicker: 'আপনার বিশ্বস্ত গ্রোথ পার্টনার', headline: 'Ads Park BD\nএডস পার্ক বিডি', sub: '✅ Meta, Google ও TikTok ফুল অ্যাডস\n✅ Pixel & Conversion API সেটআপ\n✅ লাইভ খরচ রিপোর্ট ও প্রফেশনাল ইনভয়েস', cta: 'কম খরচে বেশি মেসেজ ও সেলস', widget: 'roas', anim: 'pop', trans: 'zoom', ease: 'spring', bg1: '#09152b', bg2: '#1e3a8a', accent: '#3b82f6' }),
+    mkScene({ name: '04 · CTA', dur: 5, kicker: 'ফ্রি পেজ অডিট অফার', headline: 'আজই মেসেজ বা\nWhatsApp করুন!', sub: 'আপনার পেজের লিংক ও প্রোডাক্ট পাঠান\nবাজেট প্ল্যান বুঝে নিয়ে ক্যাম্পেইন শুরু করুন', cta: '📲 WhatsApp: {{PHONE}}', widget: 'trust', anim: 'rise', trans: 'flash', bg1: '#05261e', bg2: '#065f46', accent: '#10b981' })
+  ],
+  boost: [
+    mkScene({ name: '01 · Hook', dur: 5, kicker: 'অ্যাড অ্যাকাউন্ট সমস্যা?', headline: 'কার্ড নেই বা\nঅ্যাকাউন্ট ডিজেবল?', sub: 'নিজস্ব কার্ড না থাকায় বিজ্ঞাপন আটকে আছে?\nএখন চিন্তা ছাড়াই চালান আপনার ক্যাম্পেইন', cta: 'ভেরিফায়েড এজেন্সি অ্যাকাউন্ট', anim: 'pop', trans: 'fade', bg1: '#160b2b', bg2: '#4c1d95', accent: '#a855f7' }),
+    mkScene({ name: '02 · Service', dur: 6, kicker: 'Ads Park BD · এডস পার্ক বিডি', headline: 'সাশ্রয়ী ডলার রেট\n১০০% স্বচ্ছ হিসাব', sub: '✅ অ্যাড রিজেক্ট ও পলিসি ইস্যু সমাধান\n✅ লাইভ খরচ ও পেমেন্ট স্টেটমেন্ট\n✅ প্রতিদিন দ্রুত সাপোর্ট', cta: 'যেকোনো বাজেটে অ্যাড চালু করুন', widget: 'trust', anim: 'slide', trans: 'wipe', bg1: '#09152b', bg2: '#1e3a8a', accent: '#3b82f6' }),
+    mkScene({ name: '03 · CTA', dur: 5, kicker: 'দ্রুত শুরু করুন', headline: 'এখনি ইনবক্স বা\nWhatsApp করুন', sub: 'নিরাপদ পেমেন্ট · দ্রুত ডেলিভারি\nAds Park BD — আপনার ডিজিটাল পার্টনার', cta: '📲 WhatsApp: {{PHONE}}', anim: 'rise', trans: 'flash', bg1: '#05261e', bg2: '#065f46', accent: '#10b981' })
+  ],
+  roas: [
+    mkScene({ name: '01 · Proof', dur: 5.5, kicker: 'প্রমাণিত সেলস গ্রোথ', headline: 'কম বাজেটে\n৩x বেশি অর্ডার!', sub: 'সঠিক ক্রিয়েটিভ ও CAPI ট্র্যাকিং দিয়ে\nকস্ট পার রেজাল্ট অর্ধেকে নামিয়ে আনুন', cta: 'ডেটা-ড্রিভেন মিডিয়া বায়িং', widget: 'roas', anim: 'pop', trans: 'zoom', bg1: '#05261e', bg2: '#065f46', accent: '#10b981' }),
+    mkScene({ name: '02 · Offer', dur: 5.5, kicker: 'Ads Park BD · এডস পার্ক বিডি', headline: 'ফ্রি ক্যাম্পেইন\nঅডিট ও স্ট্র্যাটেজি', sub: '✅ রিটার্গেটিং ও লুকএলাইক অডিয়েন্স\n✅ Meta + Google + TikTok স্কেলিং\n✅ লাইভ ইনভয়েস ও P&L রিপোর্ট', cta: '📲 WhatsApp: {{PHONE}}', anim: 'rise', trans: 'fade', bg1: '#09152b', bg2: '#1e3a8a', accent: '#3b82f6' })
+  ],
+  fcom: [
+    mkScene({ name: '01 · Arrival', dur: 4.5, kicker: 'নতুন কালেকশন লাইভ', headline: 'প্রিমিয়াম কোয়ালিটি\nসেরা প্রাইসে!', sub: '১০০% অরিজিনাল প্রোডাক্ট\nসারা বাংলাদেশে দ্রুত হোম ডেলিভারি', cta: 'সীমিত স্টক — এখনই দেখুন', widget: 'offer', anim: 'wordpop', trans: 'fade', bg1: '#230918', bg2: '#831843', accent: '#ec4899' }),
+    mkScene({ name: '02 · Order', dur: 5, kicker: 'সারা দেশে ক্যাশ অন ডেলিভারি', headline: 'অগ্রিম টাকা ছাড়াই\nঅর্ডার কনফার্ম করুন', sub: '✅ প্রোডাক্ট হাতে পেয়ে চেক করে পেমেন্ট\n✅ ৭ দিনের ইজি এক্সচেঞ্জ সুবিধা', cta: '📲 অর্ডার করতে ইনবক্স: {{PHONE}}', anim: 'rise', trans: 'wipe', bg1: '#181308', bg2: '#3b2c0a', accent: '#eab308' })
+  ],
+  tech: [
+    mkScene({ name: '01 · Flash', dur: 4.5, kicker: 'TECH FLASH SALE', headline: 'স্মার্ট গ্যাজেটে\nধামাকা অফার!', sub: 'অফিসিয়াল ওয়ারেন্টি ও প্রিমিয়াম বিল্ড\nসীমিত সময়ের জন্য স্পেশাল ডিসকাউন্ট', cta: 'মিস করবেন না ⚡', anim: 'glitch', trans: 'flash', bg1: '#09090b', bg2: '#27272a', accent: '#3b82f6' }),
+    mkScene({ name: '02 · Grab', dur: 5, kicker: 'সীমিত সময়ের ডিল', headline: 'আজই বুকিং দিন\nস্পেশাল প্রাইসে', sub: '✅ সারা দেশে ২৪-৪৮ ঘণ্টায় ডেলিভারি\n✅ অনলাইন ও ক্যাশ অন ডেলিভারি', cta: '📲 কল / WhatsApp: {{PHONE}}', anim: 'pop', trans: 'zoom', bg1: '#071e26', bg2: '#164e63', accent: '#f97316' })
+  ],
+  eid: [
+    mkScene({ name: '01 · Mega', dur: 5, kicker: '🔥 মেগা ক্যাম্পেইন অফার', headline: 'বিশেষ ছাড়ে\nশুরু করুন আজই!', sub: 'Ads Park BD-এর নতুন ক্লায়েন্টদের জন্য\nফ্রি ক্রিয়েটিভ ও সেটআপ গাইডলাইন', cta: 'অফার চলবে সীমিত সময়', widget: 'offer', anim: 'pop', trans: 'flash', bg1: '#1a0a14', bg2: '#3b0d22', accent: '#ef4444' }),
+    mkScene({ name: '02 · Action', dur: 5, kicker: 'Ads Park BD · এডস পার্ক বিডি', headline: 'এখনি ইনবক্স করে\nস্লট বুক করুন', sub: 'প্রতিদিন সীমিত ক্লায়েন্ট নেওয়া হচ্ছে\nদেরি না করে মেসেজ দিন', cta: '📲 WhatsApp: {{PHONE}}', anim: 'rise', trans: 'fade', bg1: '#05261e', bg2: '#065f46', accent: '#10b981' })
+  ],
+  edu: [
+    mkScene({ name: '01 · Learn', dur: 5, kicker: 'দক্ষতা অর্জন করুন', headline: 'প্র্যাকটিক্যাল স্কিল\nশিখে ক্যারিয়ার গড়ুন', sub: 'লাইভ প্রজেক্ট ও রিয়েল মার্কেটপ্লেস গাইডলাইন\nমেন্টর সাপোর্ট প্রতিটি ধাপে', cta: 'ভর্তি চলছে 🎓', anim: 'rise', trans: 'fade', bg1: '#09152b', bg2: '#1e3a8a', accent: '#3b82f6' }),
+    mkScene({ name: '02 · Join', dur: 5, kicker: 'ফ্রি ওরিয়েন্টেশন ক্লাস', headline: 'আসন সংখ্যা সীমিত\nআজই রেজিস্ট্রেশন করুন', sub: 'অনলাইন ও অফলাইন ব্যাচ সুবিধা\nকোর্স শেষে ভেরিফায়েড সার্টিফিকেট', cta: '📲 যোগাযোগ: {{PHONE}}', anim: 'slide', trans: 'curtain', bg1: '#071e26', bg2: '#164e63', accent: '#f97316' })
+  ],
+  real: [
+    mkScene({ name: '01 · Prestige', dur: 5.5, kicker: 'PRESTIGE COLLECTION', headline: 'আপনার স্বপ্নের ঠিকানা\nএখন হাতের নাগালে', sub: 'আধুনিক স্থাপত্য ও প্রাইম লোকেশন\nসহজ কিস্তি ও শতভাগ আইনি নিশ্চয়তা', cta: 'প্রজেক্ট ভিজিট বুক করুন', anim: 'blur', trans: 'fade', bg1: '#181308', bg2: '#3b2c0a', accent: '#eab308' }),
+    mkScene({ name: '02 · Contact', dur: 5, kicker: 'সরাসরি কথা বলুন', headline: 'বিস্তারিত ফ্লোর প্ল্যান\nও প্রাইস জানতে কল করুন', sub: 'আমাদের কনসালট্যান্ট টিম সবসময় প্রস্তুত', cta: '📞 হটলাইন: {{PHONE}}', anim: 'rise', trans: 'wipe', bg1: '#09090b', bg2: '#27272a', accent: '#eab308' })
+  ]
+};
+
+let scenes = structuredClone(TEMPLATES.promo);
+let undoStack = [];
+let activeSceneIdx = 0;
+let activeKfIdx = 1;
+let aspectRatio = '9:16';
+let previewScale = 0.5;
+let renderScale = 0.5;
+let logicalW = 1080, logicalH = 1920;
+let currentTime = 1.2;
+let playing = false;
+let recording = false;
+let loopPlay = true;
+let showSafeZone = false;
+let brandLogoImg = null;
+let rafId = 0, lastTick = 0;
+let laneLeftCache = 98, laneWidthCache = 600;
+let globalCfgCache = null, configDirty = true;
+const wrapCache = new Map();
+const bgCacheCanvas = document.createElement('canvas');
+const bgCacheCtx = bgCacheCanvas.getContext('2d');
+let bgCacheKey = '';
+
+function markConfigDirty() { configDirty = true; }
+function getGlobalCfg() {
+  if (globalCfgCache && !configDirty) return globalCfgCache;
+  configDirty = false;
+  globalCfgCache = {
+    brandEn: document.getElementById('gBrandEn').value.trim() || 'Ads Park BD',
+    brandBn: document.getElementById('gBrandBn').value.trim() || 'এডস পার্ক বিডি',
+    phone: document.getElementById('gPhone').value.trim() || '01XXX-XXXXXX',
+    fontFam: document.getElementById('gFont').value,
+    align: document.getElementById('gAlign').value,
+    headSizeRaw: Number(document.getElementById('gHeadSize').value),
+    shadowPct: Number(document.getElementById('gShadow').value) / 100,
+    cardStyle: document.getElementById('gCardStyle').value,
+    particleMode: document.getElementById('gParticles').value,
+    vigPct: Number(document.getElementById('gVig').value) / 100,
+    glowPct: Number(document.getElementById('gGlow').value) / 100,
+    grainPct: Number(document.getElementById('gGrain').value) / 100,
+    shineOn: document.getElementById('gShine').checked,
+    cinemaOn: document.getElementById('gCinema').checked,
+    bri: document.getElementById('gBri').value,
+    con: document.getElementById('gCon').value,
+    sat: document.getElementById('gSat').value,
+    hue: document.getElementById('gHue').value,
+    wmPos: document.getElementById('gWatermarkPos').value
+  };
+  return globalCfgCache;
+}
+function applyCanvasDimensions(scale = previewScale) {
+  renderScale = Number(scale) || 0.5;
+  if (aspectRatio === '9:16') { logicalW = 1080; logicalH = 1920; }
+  else if (aspectRatio === '1:1') { logicalW = 1080; logicalH = 1080; }
+  else { logicalW = 1920; logicalH = 1080; }
+  canvas.width = Math.max(360, Math.round(logicalW * renderScale));
+  canvas.height = Math.max(360, Math.round(logicalH * renderScale));
+  bgCacheKey = '';
+  const fps = document.getElementById('gFps').value;
+  document.getElementById('resLabel').textContent = `${canvas.width}x${canvas.height} · ${fps}fps`;
+}
+function setPreviewQuality(val) {
+  previewScale = Number(val) || 0.5;
+  if (!recording) { applyCanvasDimensions(previewScale); renderOnce(); }
+}
+
+// Audio & Voiceover state
+let audioCtx = null, musicGain = null, voiceGainNode = null, synthTimer = null;
+let customMusicBuf = null, customMusicSrc = null;
+let voiceBuf = null, voiceSrc = null, voiceWavBlob = null;
+let micRecorder = null, micStream = null, micChunks = [], micMeterRaf = 0, micRecStart = 0, micTimerInt = 0;
+
+function pushUndo() {
+  undoStack.push(JSON.stringify(scenes.map(s => ({ ...s, media: null, mediaType: null }))));
+  if (undoStack.length > 25) undoStack.shift();
+}
+function undoHistory() {
+  const prev = undoStack.pop();
+  if (!prev) return;
+  try {
+    const parsed = JSON.parse(prev);
+    scenes = parsed.map((s, i) => ({ ...s, media: scenes[i]?.media || null, mediaType: scenes[i]?.mediaType || null }));
+    activeSceneIdx = Math.min(activeSceneIdx, scenes.length - 1);
+    syncEditorFromScene(); rebuildTimeline(); renderOnce();
+  } catch (_) {}
+}
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    const tag = document.activeElement?.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') { e.preventDefault(); undoHistory(); }
+  }
+});
+
+function totalDuration() { return Math.max(1, scenes.reduce((s, x) => s + (x.dur || 5), 0)); }
+function sceneStart(idx) { let s = 0; for (let i = 0; i < idx && i < scenes.length; i++) s += scenes[i].dur || 5; return s; }
+function sceneAtTime(t) {
+  let acc = 0;
+  for (let i = 0; i < scenes.length; i++) {
+    const dur = scenes[i].dur || 5;
+    if (t <= acc + dur || i === scenes.length - 1) return { index: i, scene: scenes[i], localT: Math.max(0, t - acc), start: acc, dur };
+    acc += dur;
+  }
+  return { index: 0, scene: scenes[0], localT: 0, start: 0, dur: 5 };
+}
+
+function loadTemplate(id) {
+  pushUndo();
+  scenes = structuredClone(TEMPLATES[id] || TEMPLATES.promo);
+  activeSceneIdx = 0; activeKfIdx = 1; currentTime = 1.0;
+  syncEditorFromScene(); rebuildTimeline(); renderOnce();
+  closeModal('libraryModal');
+}
+
+function setRatio(r) {
+  aspectRatio = r;
+  document.querySelectorAll('.seg-btn[data-ratio]').forEach(b => b.classList.toggle('active', b.dataset.ratio === r));
+  applyCanvasDimensions(previewScale);
+  renderOnce();
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.insp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.insp-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+function buildSwatches() {
+  document.getElementById('swatchGrid').innerHTML = COLOR_PRESETS.map((p, i) =>
+    `<button type="button" class="swatch" title="${p.name}" style="background:linear-gradient(135deg,${p.bg1},${p.bg2});box-shadow:inset 0 -4px 0 ${p.acc}" onclick="applyColorPreset(${i})"></button>`
+  ).join('');
+}
+function applyColorPreset(i) {
+  pushUndo();
+  const p = COLOR_PRESETS[i], sc = scenes[activeSceneIdx];
+  sc.bg1 = p.bg1; sc.bg2 = p.bg2; sc.accent = p.acc; sc.textColor = p.txt;
+  syncEditorFromScene(); rebuildTimeline(); renderOnce();
+}
+
+function syncEditorFromScene() {
+  const sc = scenes[activeSceneIdx]; if (!sc) return;
+  document.getElementById('edSceneTitle').textContent = `এডিট: ${sc.name}`;
+  document.getElementById('scName').value = sc.name || '';
+  document.getElementById('scDur').value = sc.dur || 5;
+  document.getElementById('scDurVal').textContent = (sc.dur || 5) + 's';
+  document.getElementById('scKicker').value = sc.kicker || '';
+  document.getElementById('scHead').value = sc.headline || '';
+  document.getElementById('scSub').value = sc.sub || '';
+  document.getElementById('scCta').value = sc.cta || '';
+  document.getElementById('scWidget').value = sc.widget || 'none';
+  document.getElementById('scImgOp').value = sc.imgOpacity ?? 0.35;
+  document.getElementById('scImgOpVal').textContent = Math.round((sc.imgOpacity ?? 0.35) * 100) + '%';
+  document.getElementById('scAnim').value = sc.anim || 'rise';
+  document.getElementById('scTrans').value = sc.trans || 'fade';
+  document.getElementById('scEase').value = sc.ease || 'easeOut';
+  document.getElementById('scBg1').value = sc.bg1 || '#09152b';
+  document.getElementById('scBg2').value = sc.bg2 || '#1e3a8a';
+  document.getElementById('scAcc').value = sc.accent || '#3b82f6';
+  document.getElementById('scTxt').value = sc.textColor || '#ffffff';
+
+  const kf = sc.keyframes?.[activeKfIdx] || { scale: 1, x: 0, y: 0, opacity: 1, rot: 0 };
+  document.getElementById('kfScale').value = kf.scale;
+  document.getElementById('kfScaleVal').textContent = kf.scale.toFixed(2) + 'x';
+  document.getElementById('kfX').value = kf.x ?? 0;
+  document.getElementById('kfXVal').textContent = (kf.x ?? 0) + 'px';
+  document.getElementById('kfY').value = kf.y ?? 0;
+  document.getElementById('kfYVal').textContent = (kf.y ?? 0) + 'px';
+  document.getElementById('kfOp').value = kf.opacity ?? 1;
+  document.getElementById('kfOpVal').textContent = Math.round((kf.opacity ?? 1) * 100) + '%';
+  document.getElementById('kfRot').value = kf.rot ?? 0;
+  document.getElementById('kfRotVal').textContent = (kf.rot ?? 0) + '°';
+
+  document.querySelectorAll('#kfButtons .kf-pill').forEach(b => b.classList.toggle('active', Number(b.dataset.kf) === activeKfIdx));
+
+  document.getElementById('sceneList').innerHTML = scenes.map((s, i) => `
+    <div class="scene-item ${i === activeSceneIdx ? 'active' : ''}" onclick="selectScene(${i})">
+      <div style="display:flex;align-items:center;gap:7px;min-width:0">
+        <span style="width:10px;height:10px;border-radius:3px;background:${s.accent};flex-shrink:0"></span>
+        <span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</span>
+      </div>
+      <span class="mono" style="color:var(--muted);font-size:11px">${s.dur}s · ${s.anim}</span>
+    </div>
+  `).join('');
+}
+
+function selectScene(idx) {
+  activeSceneIdx = Math.max(0, Math.min(scenes.length - 1, idx));
+  currentTime = sceneStart(activeSceneIdx) + 0.8;
+  syncEditorFromScene(); rebuildTimeline(); renderOnce();
+}
+function updateActiveScene(prop, val) {
+  const sc = scenes[activeSceneIdx]; if (!sc) return;
+  sc[prop] = val;
+  if (prop === 'dur') document.getElementById('scDurVal').textContent = val + 's';
+  if (prop === 'imgOpacity') document.getElementById('scImgOpVal').textContent = Math.round(val * 100) + '%';
+  if (['dur', 'name', 'accent', 'anim'].includes(prop)) { syncEditorFromScene(); rebuildTimeline(); }
+  renderOnce();
+}
+function selectKeyframe(kIdx) {
+  activeKfIdx = kIdx;
+  const sc = scenes[activeSceneIdx], st = sceneStart(activeSceneIdx);
+  currentTime = st + (sc.dur * (kIdx === 0 ? 0.02 : kIdx === 1 ? 0.5 : 0.96));
+  syncEditorFromScene(); rebuildTimeline(); renderOnce();
+}
+function updateKeyframe(prop, val) {
+  const sc = scenes[activeSceneIdx]; if (!sc?.keyframes) return;
+  sc.keyframes[activeKfIdx][prop] = val;
+  syncEditorFromScene(); renderOnce();
+}
+function addScene() {
+  pushUndo();
+  scenes.push(mkScene({ name: `0${scenes.length + 1} · New`, kicker: 'Ads Park BD · এডস পার্ক বিডি', headline: 'নতুন স্লাইড\nহেডলাইন লিখুন', sub: 'এখানে আপনার অফার লিখুন', cta: '📲 WhatsApp: {{PHONE}}' }));
+  selectScene(scenes.length - 1);
+}
+function duplicateScene() {
+  pushUndo();
+  const c = structuredClone({ ...scenes[activeSceneIdx], media: null });
+  c.media = scenes[activeSceneIdx].media; c.mediaType = scenes[activeSceneIdx].mediaType;
+  c.name = c.name + ' (Copy)';
+  scenes.splice(activeSceneIdx + 1, 0, c);
+  selectScene(activeSceneIdx + 1);
+}
+function moveScene(dir) {
+  const to = activeSceneIdx + dir;
+  if (to < 0 || to >= scenes.length) return;
+  pushUndo();
+  const [item] = scenes.splice(activeSceneIdx, 1);
+  scenes.splice(to, 0, item);
+  selectScene(to);
+}
+function deleteActiveScene() {
+  if (scenes.length <= 1) return;
+  pushUndo();
+  scenes.splice(activeSceneIdx, 1);
+  selectScene(Math.max(0, activeSceneIdx - 1));
+}
+
+// Background Image OR Video Clip Upload per Scene
+document.getElementById('scMediaInput').addEventListener('change', e => {
+  const file = e.target.files?.[0]; if (!file) return;
+  const url = URL.createObjectURL(file);
+  if (file.type.startsWith('video/')) {
+    const vid = document.createElement('video');
+    vid.muted = true; vid.loop = true; vid.playsInline = true; vid.src = url;
+    vid.onloadeddata = () => {
+      scenes[activeSceneIdx].media = vid;
+      scenes[activeSceneIdx].mediaType = 'video';
+      vid.play().catch(() => {});
+      renderOnce();
+    };
+  } else {
+    const img = new Image();
+    img.onload = () => {
+      scenes[activeSceneIdx].media = img;
+      scenes[activeSceneIdx].mediaType = 'image';
+      renderOnce();
+    };
+    img.src = url;
+  }
+});
+function clearSceneMedia() {
+  const sc = scenes[activeSceneIdx];
+  if (sc.mediaType === 'video' && sc.media) { try { sc.media.pause(); } catch (_) {} }
+  sc.media = null; sc.mediaType = null;
+  document.getElementById('scMediaInput').value = '';
+  renderOnce();
+}
+
+document.getElementById('gLogoInput').addEventListener('change', e => {
+  const file = e.target.files?.[0]; if (!file) return;
+  const img = new Image();
+  img.onload = () => { brandLogoImg = img; renderOnce(); };
+  img.src = URL.createObjectURL(file);
+});
+function clearBrandLogo() { brandLogoImg = null; document.getElementById('gLogoInput').value = ''; renderOnce(); }
+
+function loadGoogleFont() {
+  const raw = document.getElementById('customGoogleFont').value.trim();
+  if (!raw) return;
+  const fam = raw.replace(/\s+/g, '+');
+  const lnk = document.createElement('link');
+  lnk.rel = 'stylesheet';
+  lnk.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(raw).replace(/%20/g, '+')}:wght@500;700;800&display=swap`;
+  document.head.appendChild(lnk);
+  const sel = document.getElementById('gFont');
+  if (![...sel.options].some(o => o.value === raw)) {
+    const opt = document.createElement('option'); opt.value = raw; opt.textContent = raw + ' (Google)';
+    sel.appendChild(opt);
+  }
+  sel.value = raw;
+  markConfigDirty();
+  wrapCache.clear();
+  setTimeout(() => { wrapCache.clear(); renderOnce(); }, 450);
+}
+
+// Timeline Rendering
+function rebuildTimeline() {
+  const tot = totalDuration();
+  document.getElementById('tlSummary').textContent = `${scenes.length} Scenes · ${tot.toFixed(1)}s`;
+  const ruler = document.getElementById('tlRuler');
+  const ticks = [];
+  for (let s = 0; s <= tot; s += 2) ticks.push(`<span style="position:absolute;left:${(s / tot) * 100}%;transform:translateX(-50%)">${s}s</span>`);
+  ruler.innerHTML = ticks.join('');
+
+  document.getElementById('tlSceneLane').innerHTML = scenes.map((sc, i) => {
+    const pct = (sc.dur / tot) * 100;
+    return `<div class="tl-clip ${i === activeSceneIdx ? 'active' : ''}" style="width:${pct}%;background:linear-gradient(120deg,${sc.bg2},${sc.accent})" onclick="selectScene(${i})">
+      <span style="overflow:hidden;text-overflow:ellipsis">${sc.name}</span>
+      <span class="mono" style="opacity:.85;font-size:10px">${sc.dur}s</span>
+    </div>`;
+  }).join('');
+
+  const st = sceneStart(activeSceneIdx), dur = scenes[activeSceneIdx]?.dur || 5;
+  const kPos = [0.03, 0.5, 0.97].map(f => ((st + dur * f) / tot) * 100);
+  document.getElementById('tlKfLane').innerHTML = kPos.map((leftPct, k) =>
+    `<div class="kf-diamond ${k === activeKfIdx ? 'active' : ''}" style="left:${leftPct}%" onclick="selectKeyframe(${k})"></div>`
+  ).join('') + `<div style="position:absolute;left:${(st / tot) * 100}%;width:${(dur / tot) * 100}%;top:0;bottom:0;border-left:1px dashed rgba(245,158,11,.5);border-right:1px dashed rgba(245,158,11,.5);pointer-events:none"></div>`;
+
+  measureLaneCache();
+  updatePlayhead();
+  drawAudioLanes();
+}
+
+function measureLaneCache() {
+  const tracks = document.getElementById('tlTracks');
+  const lane = document.getElementById('tlSceneLane');
+  if (!tracks || !lane) return;
+  const laneRect = lane.getBoundingClientRect();
+  const tracksRect = tracks.getBoundingClientRect();
+  if (laneRect.width > 0) {
+    laneLeftCache = laneRect.left - tracksRect.left + tracks.scrollLeft;
+    laneWidthCache = laneRect.width;
+  }
+}
+let lastTimeDisplay = '';
+function updatePlayhead() {
+  const tot = totalDuration();
+  const x = laneLeftCache + (Math.min(tot, currentTime) / tot) * laneWidthCache;
+  document.getElementById('tlPlayhead').style.left = x.toFixed(1) + 'px';
+  const txt = `${fmtTime(currentTime)} / ${fmtTime(tot)}`;
+  if (txt !== lastTimeDisplay) {
+    lastTimeDisplay = txt;
+    document.getElementById('timeDisplay').textContent = txt;
+  }
+}
+function fmtTime(sec) { return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${(sec % 60).toFixed(1).padStart(4, '0')}`; }
+function scrubClick(e) {
+  const rect = document.getElementById('tlSceneLane').getBoundingClientRect();
+  seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * totalDuration());
+}
+
+function drawWaveform(canvasId, buffer, color, emptyLabel, fallbackSynth) {
+  const ac = document.getElementById(canvasId);
+  const w = ac.width = ac.parentElement.clientWidth || 600;
+  const h = ac.height = 30;
+  const c = ac.getContext('2d');
+  c.clearRect(0, 0, w, h);
+  if (!buffer && !fallbackSynth) {
+    c.fillStyle = '#64748b'; c.font = '11px monospace'; c.fillText(emptyLabel, 10, 19); return;
+  }
+  c.fillStyle = color;
+  const bars = Math.floor(w / 5);
+  const data = buffer ? buffer.getChannelData(0) : null;
+  for (let i = 0; i < bars; i++) {
+    const amp = data
+      ? Math.abs(data[Math.floor((i / bars) * data.length)] || 0.1) * 2.2
+      : (0.22 + 0.65 * Math.abs(Math.sin(i * 0.43) * Math.cos(i * 0.19)));
+    const bh = Math.max(3, Math.min(h - 6, amp * (h - 6)));
+    c.fillRect(i * 5 + 2, (h - bh) / 2, 2.5, bh);
+  }
+}
+function drawAudioLanes() {
+  const mode = document.getElementById('gAudioMode').value;
+  drawWaveform('audioWaveCanvas', mode === 'custom' ? customMusicBuf : null, mode === 'custom' ? '#10b981' : '#3b82f6', 'MUTED', mode !== 'mute');
+  drawWaveform('voiceWaveCanvas', voiceBuf, '#f59e0b', 'No Voiceover (Record or generate AI Voice)', false);
+}
+
+// Motion Engine
+function evalEase(t, type) {
+  const c = Math.max(0, Math.min(1, t));
+  if (type === 'linear') return c;
+  if (type === 'spring') { const s = 1.70158; return 1 + (s + 1) * Math.pow(c - 1, 3) + s * Math.pow(c - 1, 2); }
+  return 1 - Math.pow(1 - c, 3);
+}
+function interpKeyframes(kfs, normT, ease) {
+  const k0 = kfs[0] || { scale: 1, x: 0, y: 0, opacity: 1, rot: 0 };
+  const k1 = kfs[1] || k0, k2 = kfs[2] || k1;
+  const [a, b, seg] = normT <= 0.5 ? [k0, k1, normT / 0.5] : [k1, k2, (normT - 0.5) / 0.5];
+  const e = evalEase(seg, ease);
+  return {
+    scale: a.scale + (b.scale - a.scale) * e,
+    x: (a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * e,
+    y: (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * e,
+    opacity: Math.max(0, Math.min(1, (a.opacity ?? 1) + ((b.opacity ?? 1) - (a.opacity ?? 1)) * e)),
+    rot: (a.rot ?? 0) + ((b.rot ?? 0) - (a.rot ?? 0)) * e
+  };
+}
+function wrapLines(text, maxW, font) {
+  const key = font + '|' + maxW + '|' + text;
+  const cached = wrapCache.get(key);
+  if (cached) return cached;
+  ctx.font = font;
+  const out = [];
+  for (const para of String(text || '').split('\n')) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (!words.length) { out.push(''); continue; }
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) { out.push(line); line = w; }
+      else line = test;
+    }
+    if (line) out.push(line);
+  }
+  if (wrapCache.size > 60) wrapCache.clear();
+  wrapCache.set(key, out);
+  return out;
+}
+
+function drawParticles(t, W, H, mode, accent) {
+  if (mode === 'none') return;
+  ctx.save();
+  if (mode === 'grid') {
+    ctx.strokeStyle = accent; ctx.globalAlpha = 0.08; ctx.lineWidth = 1.5;
+    const step = 90, off = (t * 28) % step;
+    for (let x = -step; x < W + step; x += step) { ctx.beginPath(); ctx.moveTo(x + off, 0); ctx.lineTo(x + off, H); ctx.stroke(); }
+    for (let y = -step; y < H + step; y += step) { ctx.beginPath(); ctx.moveTo(0, y + off); ctx.lineTo(W, y + off); ctx.stroke(); }
+  } else {
+    const count = mode === 'sparks' ? 24 : mode === 'bokeh' ? 10 : 14;
+    for (let i = 0; i < count; i++) {
+      const x = ((i * 173 + t * (mode === 'sparks' ? 14 : 22)) % (W + 80)) - 40;
+      const y = ((i * 293 - t * (mode === 'sparks' ? 72 : 24)) % (H + 80) + (H + 80)) % (H + 80) - 40;
+      const r = mode === 'sparks' ? 2.5 + (i % 3) * 2 : mode === 'bokeh' ? 36 + (i % 4) * 24 : 10 + (i % 5) * 14;
+      ctx.globalAlpha = mode === 'sparks' ? 0.35 : mode === 'bokeh' ? 0.09 : 0.07;
+      ctx.fillStyle = i % 2 === 0 ? accent : '#ffffff';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawWidgetCard(type, cx, y, boxW, accent, localT) {
+  if (!type || type === 'none') return;
+  ctx.save();
+  const w = Math.min(boxW - 40, 740), h = 112;
+  ctx.fillStyle = 'rgba(15,23,42,0.88)';
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(cx - w / 2, y, w, h, 20); ctx.fill(); ctx.stroke();
+  ctx.textBaseline = 'middle';
+  if (type === 'roas') {
+    const bars = [26, 42, 58, 76];
+    const p = evalEase(localT / 0.9, 'easeOut');
+    bars.forEach((bh, i) => {
+      ctx.fillStyle = i === 3 ? '#10b981' : accent;
+      ctx.beginPath(); ctx.roundRect(cx - w / 2 + 34 + i * 28, y + h - 18 - bh * p, 18, bh * p, 5); ctx.fill();
+    });
+    ctx.textAlign = 'left'; ctx.fillStyle = '#6ee7b7'; ctx.font = '800 32px "Plus Jakarta Sans","Noto Sans Bengali",sans-serif';
+    ctx.fillText('📈 +320% Reach · 4.8x ROAS', cx - w / 2 + 168, y + 40);
+    ctx.fillStyle = '#cbd5e1'; ctx.font = '600 22px "Noto Sans Bengali",sans-serif';
+    ctx.fillText('রিয়েল-টাইম Pixel & CAPI রেজাল্ট গ্রোথ', cx - w / 2 + 168, y + 78);
+  } else if (type === 'trust') {
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = '800 30px "Noto Sans Bengali",sans-serif';
+    ctx.fillText('🛡️ ১০০% স্বচ্ছ ডলার হিসাব ও ইনভয়েস গ্যারান্টি', cx, y + 40);
+    ctx.fillStyle = '#93c5fd'; ctx.font = '600 22px "Noto Sans Bengali",sans-serif';
+    ctx.fillText('২৪/৭ ডেডিকেটেড মিডিয়া বায়ার সাপোর্ট', cx, y + 78);
+  } else if (type === 'offer') {
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fde047'; ctx.font = '800 32px "Noto Sans Bengali",sans-serif';
+    ctx.fillText('🔥 সীমিত সময়ের স্পেশাল ক্যাম্পেইন অফার', cx, y + 40);
+    ctx.fillStyle = '#ffffff'; ctx.font = '600 22px "Noto Sans Bengali",sans-serif';
+    ctx.fillText('আজই বুকিং করলে ফ্রি অ্যাড অডিট ও কনসাল্টেশন', cx, y + 78);
+  }
+  ctx.restore();
+}
+
+function getCachedStaticBg(W, H, bg1, bg2) {
+  const key = `${W}x${H}|${bg1}|${bg2}`;
+  if (bgCacheKey === key) return bgCacheCanvas;
+  bgCacheKey = key;
+  bgCacheCanvas.width = Math.max(16, Math.round(W * 0.25));
+  bgCacheCanvas.height = Math.max(16, Math.round(H * 0.25));
+  const bw = bgCacheCanvas.width, bh = bgCacheCanvas.height;
+  const g = bgCacheCtx.createLinearGradient(0, 0, bw, bh);
+  g.addColorStop(0, bg1 || '#09152b');
+  g.addColorStop(1, bg2 || '#1e3a8a');
+  bgCacheCtx.fillStyle = g;
+  bgCacheCtx.fillRect(0, 0, bw, bh);
+  return bgCacheCanvas;
+}
+
+function drawFrame(t) {
+  const W = logicalW, H = logicalH, cx = W / 2, cy = H / 2;
+  const isWide = W > H, isSq = W === H;
+  const { scene: sc, localT, dur } = sceneAtTime(t);
+  const normT = Math.max(0, Math.min(1, localT / dur));
+  const cfg = getGlobalCfg();
+
+  const brandEn = cfg.brandEn, brandBn = cfg.brandBn, phone = cfg.phone;
+  const fontFam = cfg.fontFam, align = cfg.align;
+  const baseHeadSize = cfg.headSizeRaw * (isWide ? 0.9 : isSq ? 0.84 : 1);
+  const shadowPct = cfg.shadowPct, cardStyle = cfg.cardStyle, particleMode = cfg.particleMode;
+  const vigPct = cfg.vigPct, glowPct = cfg.glowPct, grainPct = cfg.grainPct;
+  const shineOn = cfg.shineOn, cinemaOn = cfg.cinemaOn;
+  const bri = cfg.bri, con = cfg.con, sat = cfg.sat, hue = cfg.hue;
+  const wmPos = cfg.wmPos;
+  const replaceTokens = str => String(str || '').replace(/\{\{PHONE\}\}/g, phone).replace(/\{\{BRAND\}\}/g, `${brandEn} · ${brandBn}`);
+
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+  ctx.save();
+  const hasColorFilter = !(bri == 100 && con == 100 && sat == 100 && hue == 0);
+  if (hasColorFilter && (recording || renderScale >= 0.65 || !playing)) {
+    ctx.filter = `brightness(${bri}%) contrast(${con}%) saturate(${sat}%) hue-rotate(${hue}deg)`;
+  }
+
+  ctx.drawImage(getCachedStaticBg(W, H, sc.bg1, sc.bg2), 0, 0, W, H);
+
+  // Scene Media (Image OR Looping Video)
+  if (sc.media) {
+    ctx.save();
+    ctx.globalAlpha = sc.imgOpacity ?? 0.35;
+    const kb = 1 + normT * 0.1;
+    const mw = sc.mediaType === 'video' ? (sc.media.videoWidth || 1280) : sc.media.width;
+    const mh = sc.mediaType === 'video' ? (sc.media.videoHeight || 720) : sc.media.height;
+    const fit = Math.max(W / mw, H / mh) * kb;
+    if (sc.mediaType === 'video' && !playing && !recording) {
+      const targetVT = localT % Math.max(0.5, sc.media.duration || 5);
+      if (Math.abs(sc.media.currentTime - targetVT) > 0.25) sc.media.currentTime = targetVT;
+    }
+    ctx.drawImage(sc.media, cx - (mw * fit) / 2, cy - (mh * fit) / 2, mw * fit, mh * fit);
+    ctx.restore();
+  }
+
+  if (glowPct > 0) {
+    ctx.save();
+    const rg = ctx.createRadialGradient(cx + Math.sin(t) * 90, cy - H * 0.15, 20, cx, cy, W * 0.65);
+    rg.addColorStop(0, sc.accent || '#3b82f6'); rg.addColorStop(1, 'transparent');
+    ctx.globalAlpha = glowPct * 0.36; ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  drawParticles(t, W, H, particleMode, sc.accent || '#3b82f6');
+
+  if (vigPct > 0) {
+    ctx.save();
+    const vg = ctx.createRadialGradient(cx, cy, W * 0.25, cx, cy, Math.max(W, H) * 0.78);
+    vg.addColorStop(0, 'transparent'); vg.addColorStop(1, `rgba(0,0,0,${vigPct * 0.85})`);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // Transitions
+  const transT = Math.min(1, localT / 0.45);
+  let transAlpha = 1, transX = 0, transScale = 1, flashAlpha = 0, blurPx = 0;
+  if (sc.trans === 'wipe') transX = (1 - evalEase(transT, 'easeOut')) * W * 0.25;
+  else if (sc.trans === 'zoom') transScale = 0.86 + 0.14 * evalEase(transT, 'easeOut');
+  else if (sc.trans === 'flash') flashAlpha = Math.max(0, 1 - localT / 0.35) * 0.55;
+  else if (sc.trans === 'curtain') {
+    const cw = (1 - evalEase(transT, 'easeOut')) * (W / 2);
+    if (cw > 1) { ctx.fillStyle = '#050811'; ctx.fillRect(0, 0, cw, H); ctx.fillRect(W - cw, 0, cw, H); }
+  } else transAlpha = evalEase(transT, 'easeOut');
+
+  const kf = interpKeyframes(sc.keyframes || [], normT, sc.ease || 'easeOut');
+  const enterT = Math.min(1, localT / 0.68), enterE = evalEase(enterT, sc.ease || 'easeOut');
+  let animY = 0, animX = 0, animS = 1;
+  if (sc.anim === 'rise') animY = (1 - enterE) * 55;
+  else if (sc.anim === 'slide') animX = -(1 - enterE) * 90;
+  else if (sc.anim === 'pop') animS = 0.72 + 0.28 * evalEase(enterT, 'spring');
+  else if (sc.anim === 'blur') blurPx = Math.max(0, (1 - enterE) * 14);
+
+  // Foreground Keyframed Layer
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, kf.opacity * transAlpha));
+  if (blurPx > 0.3) ctx.filter = `brightness(${bri}%) contrast(${con}%) saturate(${sat}%) blur(${blurPx.toFixed(1)}px)`;
+  ctx.translate(cx + kf.x + transX + animX, cy + kf.y + animY - (sc.widget && sc.widget !== 'none' ? 58 : 0));
+  ctx.rotate((kf.rot * Math.PI) / 180);
+  ctx.scale(kf.scale * transScale * animS, kf.scale * transScale * animS);
+
+  const boxW = isWide ? W * 0.76 : W * 0.85;
+  const textX = align === 'left' ? -boxW / 2 + 44 : 0;
+  ctx.textAlign = align; ctx.textBaseline = 'middle';
+  const effShadow = playing && !recording ? shadowPct * 0.45 : shadowPct;
+  ctx.shadowColor = `rgba(0,0,0,${effShadow * 0.85})`; ctx.shadowBlur = recording ? effShadow * 22 : effShadow * 10; ctx.shadowOffsetY = effShadow * 5;
+
+  const kickerTxt = replaceTokens(sc.kicker);
+  let headTxt = replaceTokens(sc.headline);
+  if (sc.anim === 'type') {
+    const chars = Math.max(1, Math.floor(headTxt.length * Math.min(1, localT / 1.1)));
+    headTxt = headTxt.slice(0, chars);
+  } else if (sc.anim === 'wordpop') {
+    const words = headTxt.split(' ');
+    const showN = Math.max(1, Math.ceil(words.length * Math.min(1, localT / 0.85)));
+    headTxt = words.slice(0, showN).join(' ');
+  }
+
+  const headLines = wrapLines(headTxt, boxW - 80, `800 ${Math.round(baseHeadSize)}px "${fontFam}","Noto Sans Bengali",sans-serif`);
+  const subLines = wrapLines(replaceTokens(sc.sub), boxW - 88, `600 ${Math.round(baseHeadSize * 0.44)}px "${fontFam}","Noto Sans Bengali",sans-serif`);
+  const ctaTxt = replaceTokens(sc.cta);
+  const headStep = baseHeadSize * 1.24, subStep = baseHeadSize * 0.65;
+  const totalContentH = (kickerTxt ? 54 : 0) + headLines.length * headStep + (subLines.length ? 26 + subLines.length * subStep : 0) + (ctaTxt ? 94 : 0);
+
+  if (cardStyle !== 'minimal') {
+    ctx.save();
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = cardStyle === 'solid' ? 'rgba(9,13,22,0.9)' : 'rgba(15,23,42,0.52)';
+    ctx.strokeStyle = cardStyle === 'solid' ? (sc.accent || '#3b82f6') : 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(-boxW / 2, -totalContentH / 2 - 44, boxW, totalContentH + 88, 28); ctx.fill(); ctx.stroke();
+
+    if (shineOn) {
+      ctx.clip();
+      const sx = -boxW + ((localT * 420) % (boxW * 2.4));
+      const sg = ctx.createLinearGradient(sx - 90, 0, sx + 90, 0);
+      sg.addColorStop(0, 'transparent'); sg.addColorStop(0.5, 'rgba(255,255,255,0.12)'); sg.addColorStop(1, 'transparent');
+      ctx.fillStyle = sg; ctx.fillRect(-boxW / 2, -totalContentH / 2 - 44, boxW, totalContentH + 88);
+    }
+    ctx.restore();
+  }
+
+  let yCursor = -totalContentH / 2 + 12;
+  if (kickerTxt) {
+    ctx.fillStyle = sc.accent || '#60a5fa';
+    ctx.font = `700 ${Math.round(baseHeadSize * 0.43)}px "${fontFam}","Noto Sans Bengali",sans-serif`;
+    ctx.fillText(kickerTxt, textX, yCursor); yCursor += 56;
+  }
+
+  ctx.font = `800 ${Math.round(baseHeadSize)}px "${fontFam}","Noto Sans Bengali",sans-serif`;
+  headLines.forEach(ln => {
+    if (sc.anim === 'glitch' && localT < 0.7) {
+      ctx.fillStyle = 'rgba(239,68,68,0.7)'; ctx.fillText(ln, textX - 5, yCursor + headStep * 0.35);
+      ctx.fillStyle = 'rgba(59,130,246,0.7)'; ctx.fillText(ln, textX + 5, yCursor + headStep * 0.35);
+    }
+    ctx.fillStyle = sc.textColor || '#ffffff';
+    ctx.fillText(ln, textX, yCursor + headStep * 0.35);
+    yCursor += headStep;
+  });
+
+  if (subLines.length) {
+    yCursor += 18;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = `600 ${Math.round(baseHeadSize * 0.44)}px "${fontFam}","Noto Sans Bengali",sans-serif`;
+    subLines.forEach(ln => { ctx.fillText(ln, textX, yCursor + subStep * 0.35); yCursor += subStep; });
+  }
+
+  if (ctaTxt) {
+    yCursor += 46;
+    const btnW = Math.min(boxW - 70, Math.max(420, ctx.measureText(ctaTxt).width + 130));
+    const btnX = align === 'left' ? textX : -btnW / 2;
+    ctx.save();
+    ctx.fillStyle = sc.accent || '#3b82f6';
+    ctx.beginPath(); ctx.roundRect(btnX, yCursor - 34, btnW, 70, 18); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+    ctx.font = `800 ${Math.round(baseHeadSize * 0.46)}px "Plus Jakarta Sans","Noto Sans Bengali",sans-serif`;
+    ctx.fillText(ctaTxt, btnX + btnW / 2, yCursor + 2);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Optional Scene Metric / Trust Widget below main card
+  if (sc.widget && sc.widget !== 'none') {
+    drawWidgetCard(sc.widget, cx, cy + totalContentH / 2 + 26, boxW, sc.accent || '#3b82f6', localT);
+  }
+
+  // Persistent Brand Watermark
+  if (wmPos !== 'hidden') {
+    ctx.save();
+    ctx.shadowBlur = 0;
+    const wy = wmPos === 'top' ? (isWide ? 46 : 74) : H - 62;
+    const wx = wmPos === 'top' ? cx : 48;
+    ctx.textAlign = wmPos === 'top' ? 'center' : 'left'; ctx.textBaseline = 'middle';
+    if (brandLogoImg && wmPos === 'top') {
+      const lh = 44, lw = (brandLogoImg.width / brandLogoImg.height) * lh;
+      ctx.drawImage(brandLogoImg, cx - lw / 2 - 190, wy - lh / 2, lw, lh);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = `800 28px "Plus Jakarta Sans","Noto Sans Bengali",sans-serif`;
+    ctx.fillText(`${brandEn}  ·  ${brandBn}`, wx + (brandLogoImg && wmPos === 'top' ? 28 : 0), wy);
+    ctx.restore();
+  }
+
+  if (cinemaOn) {
+    ctx.fillStyle = '#000000';
+    const barH = Math.round(H * 0.085);
+    ctx.fillRect(0, 0, W, barH); ctx.fillRect(0, H - barH, W, barH);
+  }
+
+  if (grainPct > 0.02) {
+    ctx.save(); ctx.globalAlpha = grainPct * 0.24; ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 150; i++) ctx.fillRect(((i * 397 + Math.floor(t * 24) * 53) % W), ((i * 613 + Math.floor(t * 24) * 89) % H), 2, 2);
+    ctx.restore();
+  }
+  if (flashAlpha > 0) { ctx.fillStyle = `rgba(255,255,255,${flashAlpha})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+
+  if (showSafeZone && !recording) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(16,185,129,0.78)'; ctx.setLineDash([12, 10]); ctx.lineWidth = 3;
+    const padX = isWide ? 140 : 72, padTop = isWide ? 80 : 210, padBot = isWide ? 90 : 310;
+    ctx.strokeRect(padX, padTop, W - padX * 2, H - padTop - padBot);
+    ctx.fillStyle = 'rgba(16,185,129,0.95)'; ctx.font = '700 24px monospace';
+    ctx.fillText('SAFE TEXT ZONE (Reels UI Clear)', padX + 14, padTop - 16);
+    ctx.restore();
+  }
+}
+
+let renderQueued = false;
+function renderOnce() {
+  if (playing || recording) { drawFrame(currentTime); updatePlayhead(); return; }
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    drawFrame(currentTime);
+    updatePlayhead();
+  });
+}
+
+// Audio Mixing: Music + Own-Voice Studio Mastering Chain
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function startPlaybackAudio(destNode, offsetSec) {
+  ensureAudio();
+  const hasVoice = Boolean(voiceBuf);
+  const autoDuck = document.getElementById('gAutoDuck').checked && hasVoice;
+  const musBase = (Number(document.getElementById('gVol').value) / 100) * (autoDuck ? 0.16 : 0.45);
+
+  // Voiceover Track with Studio EQ + Compressor
+  if (hasVoice) {
+    voiceGainNode = audioCtx.createGain();
+    voiceGainNode.gain.value = Number(document.getElementById('voVol').value) / 100;
+
+    const bass = audioCtx.createBiquadFilter();
+    bass.type = 'lowshelf'; bass.frequency.value = 180;
+    bass.gain.value = Number(document.getElementById('voBass').value);
+
+    const clarity = audioCtx.createBiquadFilter();
+    clarity.type = 'highshelf'; clarity.frequency.value = 3200;
+    clarity.gain.value = Number(document.getElementById('voClarity').value);
+
+    const comp = audioCtx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.ratio.value = 4;
+
+    voiceSrc = audioCtx.createBufferSource();
+    voiceSrc.buffer = voiceBuf;
+    voiceSrc.playbackRate.value = Number(document.getElementById('voRate').value) || 1;
+    voiceSrc.connect(bass); bass.connect(clarity); clarity.connect(comp); comp.connect(voiceGainNode);
+    voiceGainNode.connect(audioCtx.destination);
+    if (destNode) voiceGainNode.connect(destNode);
+    if (offsetSec < voiceBuf.duration) voiceSrc.start(0, offsetSec);
+  }
+
+  // Background Music Track
+  const mode = document.getElementById('gAudioMode').value;
+  if (mode === 'mute') return;
+  musicGain = audioCtx.createGain();
+  musicGain.gain.value = musBase;
+  musicGain.connect(audioCtx.destination);
+  if (destNode) musicGain.connect(destNode);
+
+  if (mode === 'custom' && customMusicBuf) {
+    customMusicSrc = audioCtx.createBufferSource();
+    customMusicSrc.buffer = customMusicBuf;
+    customMusicSrc.loop = true;
+    customMusicSrc.connect(musicGain);
+    customMusicSrc.start(0, offsetSec % customMusicBuf.duration);
+    return;
+  }
+
+  const scales = {
+    upbeat: [261.63, 329.63, 392.0, 523.25, 392.0, 329.63, 293.66, 392.0],
+    pulse: [196.0, 246.94, 293.66, 392.0, 293.66, 246.94, 220.0, 293.66],
+    ambient: [261.63, 329.63, 392.0, 493.88]
+  };
+  const notes = scales[mode] || scales.upbeat;
+  let step = 0;
+  const intervalMs = mode === 'ambient' ? 900 : mode === 'pulse' ? 320 : 370;
+  synthTimer = setInterval(() => {
+    if (!audioCtx || (!playing && !recording)) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+    osc.type = mode === 'ambient' ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(notes[step % notes.length], now);
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.exponentialRampToValueAtTime(0.32, now + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, now + intervalMs / 1000);
+    osc.connect(g); g.connect(musicGain); osc.start(now); osc.stop(now + intervalMs / 1000 + 0.04);
+
+    if (mode !== 'ambient' && step % 2 === 0) {
+      const kick = audioCtx.createOscillator(), kg = audioCtx.createGain();
+      kick.type = 'sine'; kick.frequency.setValueAtTime(125, now); kick.frequency.exponentialRampToValueAtTime(42, now + 0.14);
+      kg.gain.setValueAtTime(0.55, now); kg.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      kick.connect(kg); kg.connect(musicGain); kick.start(now); kick.stop(now + 0.18);
+    }
+    step++;
+  }, intervalMs);
+}
+
+function stopPlaybackAudio() {
+  if (synthTimer) { clearInterval(synthTimer); synthTimer = null; }
+  if (customMusicSrc) { try { customMusicSrc.stop(); } catch (_) {} customMusicSrc = null; }
+  if (voiceSrc) { try { voiceSrc.stop(); } catch (_) {} voiceSrc = null; }
+}
+function updateMusicVol(val) {
+  document.getElementById('gVolVal').textContent = val + '%';
+  if (musicGain) {
+    const autoDuck = document.getElementById('gAutoDuck').checked && Boolean(voiceBuf);
+    musicGain.gain.value = (val / 100) * (autoDuck ? 0.16 : 0.45);
+  }
+}
+
+document.getElementById('gAudioInput').addEventListener('change', async e => {
+  const file = e.target.files?.[0]; if (!file) return;
+  try {
+    ensureAudio();
+    customMusicBuf = await audioCtx.decodeAudioData(await file.arrayBuffer());
+    document.getElementById('gAudioMode').value = 'custom';
+    drawAudioLanes();
+  } catch (_) {}
+});
+
+// Own-Voice Microphone Recording + Studio Enhancer Presets
+function applyVoicePreset(preset) {
+  const presets = {
+    studio: { rate: 1.0, bass: 4, clarity: 6, vol: 110 },
+    deep: { rate: 0.90, bass: 9, clarity: 3, vol: 115 },
+    bright: { rate: 1.02, bass: 0, clarity: 9, vol: 110 },
+    fast: { rate: 1.10, bass: 3, clarity: 6, vol: 110 },
+    orig: { rate: 1.0, bass: 0, clarity: 0, vol: 100 }
+  };
+  const p = presets[preset] || presets.studio;
+  document.getElementById('voRate').value = p.rate; document.getElementById('voRateVal').textContent = p.rate.toFixed(2) + 'x';
+  document.getElementById('voBass').value = p.bass; document.getElementById('voBassVal').textContent = (p.bass >= 0 ? '+' : '') + p.bass + 'dB';
+  document.getElementById('voClarity').value = p.clarity; document.getElementById('voClarityVal').textContent = (p.clarity >= 0 ? '+' : '') + p.clarity + 'dB';
+  document.getElementById('voVol').value = p.vol; document.getElementById('voVolVal').textContent = p.vol + '%';
+}
+
+async function toggleMicRecord() {
+  const btn = document.getElementById('btnRecToggle');
+  if (micRecorder && micRecorder.state === 'recording') {
+    micRecorder.stop();
+    clearInterval(micTimerInt); cancelAnimationFrame(micMeterRaf);
+    btn.className = 'primary'; btn.textContent = '🎙️ রেকর্ড শুরু';
+    document.getElementById('micMeter').style.width = '0%';
+    return;
+  }
+  try {
+    ensureAudio();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+    const src = audioCtx.createMediaStreamSource(micStream); src.connect(analyser);
+    const dataArr = new Uint8Array(analyser.frequencyBinCount);
+    const meterLoop = () => {
+      if (!micRecorder || micRecorder.state !== 'recording') return;
+      analyser.getByteFrequencyData(dataArr);
+      const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
+      document.getElementById('micMeter').style.width = Math.min(100, Math.round(avg * 1.8)) + '%';
+      micMeterRaf = requestAnimationFrame(meterLoop);
+    };
+
+    micChunks = [];
+    micRecorder = new MediaRecorder(micStream);
+    micRecorder.ondataavailable = e => { if (e.data.size > 0) micChunks.push(e.data); };
+    micRecorder.onstop = async () => {
+      micStream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(micChunks, { type: micRecorder.mimeType || 'audio/webm' });
+      voiceWavBlob = blob;
+      voiceBuf = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+      document.getElementById('voiceStatus').textContent = `✅ রেকর্ড যুক্ত (${voiceBuf.duration.toFixed(1)}s) · স্টুডিও EQ চালু`;
+      document.getElementById('btnDlAiVoice').disabled = false;
+      drawAudioLanes();
+    };
+    micRecorder.start();
+    micRecStart = Date.now();
+    btn.className = 'rec-live'; btn.textContent = '⏹ থামান (Stop)';
+    micTimerInt = setInterval(() => {
+      const s = Math.floor((Date.now() - micRecStart) / 1000);
+      document.getElementById('recTimer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    }, 250);
+    meterLoop();
+  } catch (err) {
+    document.getElementById('voiceStatus').textContent = 'মাইক্রোফোন অনুমতি পাওয়া যায়নি (Browser Mic Allow করুন)।';
+  }
+}
+
+document.getElementById('voUploadInput').addEventListener('change', async e => {
+  const file = e.target.files?.[0]; if (!file) return;
+  try {
+    ensureAudio();
+    voiceWavBlob = file;
+    voiceBuf = await audioCtx.decodeAudioData(await file.arrayBuffer());
+    document.getElementById('voiceStatus').textContent = `✅ ভয়েস আপলোড (${voiceBuf.duration.toFixed(1)}s)`;
+    document.getElementById('btnDlAiVoice').disabled = false;
+    drawAudioLanes();
+  } catch (_) {}
+});
+
+function previewVoiceTrack() {
+  if (!voiceBuf) { document.getElementById('voiceStatus').textContent = 'আগে ভয়েস রেকর্ড বা AI ভয়েস তৈরি করুন।'; return; }
+  stopPlaybackAudio();
+  startPlaybackAudio(null, 0);
+  setTimeout(() => { if (!playing && !recording) stopPlaybackAudio(); }, (voiceBuf.duration / (Number(document.getElementById('voRate').value) || 1)) * 1000 + 200);
+}
+function clearVoiceTrack() {
+  stopPlaybackAudio();
+  voiceBuf = null; voiceWavBlob = null;
+  document.getElementById('btnDlAiVoice').disabled = true;
+  document.getElementById('voiceStatus').textContent = 'কোনো ভয়েসওভার সেট করা নেই';
+  drawAudioLanes();
+}
+
+// Server-Side Gemini AI Voice Maker & Storyboard Writer
+function fillVoiceScriptFromScenes() {
+  const brand = document.getElementById('gBrandEn').value.trim() || 'Ads Park BD';
+  const phone = document.getElementById('gPhone').value.trim() || '01XXX-XXXXXX';
+  const full = scenes.map(s => `${s.headline.replace(/\n/g, ' ')}। ${s.sub.replace(/\n/g, '। ')}`).join(' ') + ` যোগাযোগ: ${brand}, WhatsApp ${phone}।`;
+  document.getElementById('aiTtsText').value = full.replace(/\{\{PHONE\}\}/g, phone).replace(/[✅❌🔥📲📈🛡️⚡]/g, '');
+}
+
+async function generateAiVoice() {
+  const text = document.getElementById('aiTtsText').value.trim();
+  if (!text) { fillVoiceScriptFromScenes(); }
+  const finalTxt = document.getElementById('aiTtsText').value.trim();
+  if (!finalTxt) return;
+
+  const btn = document.getElementById('btnGenAiVoice');
+  const st = document.getElementById('aiTtsStatus');
+  btn.disabled = true; st.textContent = '⏳ Gemini AI দিয়ে স্টুডিও ভয়েস তৈরি হচ্ছে...';
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: finalTxt,
+        voiceName: document.getElementById('aiVoiceName').value,
+        style: document.getElementById('aiVoiceStyle').value.trim()
+      })
+    });
+    const cType = res.headers.get('content-type') || '';
+    if (!cType.includes('application/json')) {
+      throw new Error('AI ভয়েস সার্ভার এখানে চালু নেই (GitHub Pages স্ট্যাটিক হোস্টিং)। তবে নিজের কণ্ঠ রেকর্ড ও স্টুডিও AI এনহ্যান্সার ১০০% কাজ করবে!');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'AI Voice failed');
+
+    const bin = atob(data.audioBase64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    voiceWavBlob = new Blob([bytes], { type: data.mimeType || 'audio/wav' });
+    ensureAudio();
+    voiceBuf = await audioCtx.decodeAudioData(await voiceWavBlob.arrayBuffer());
+    document.getElementById('voiceStatus').textContent = `🤖 AI ভয়েস যুক্ত (${voiceBuf.duration.toFixed(1)}s · ${data.voiceName})`;
+    document.getElementById('btnDlAiVoice').disabled = false;
+    st.textContent = '✅ AI ভয়েস তৈরি ও টাইমলাইনে যুক্ত হয়েছে!';
+    drawAudioLanes();
+  } catch (err) {
+    st.textContent = `⚠️ ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadVoiceWav() {
+  if (!voiceWavBlob) return;
+  const u = URL.createObjectURL(voiceWavBlob);
+  const a = document.createElement('a'); a.href = u; a.download = 'Ads-Park-BD-Voiceover.wav';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 3000);
+}
+
+async function generateAiStoryboard() {
+  const topic = document.getElementById('aiPromptTopic').value.trim();
+  if (!topic) return;
+  const btn = document.getElementById('btnGenAiStory'), st = document.getElementById('aiStoryStatus');
+  btn.disabled = true; st.textContent = '✨ AI ৪ সিনের প্রো ভিডিও স্টোরিবোর্ড তৈরি করছে...';
+  try {
+    const res = await fetch('/api/ai-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        brand: `${document.getElementById('gBrandEn').value} (${document.getElementById('gBrandBn').value})`,
+        offer: topic,
+        phone: document.getElementById('gPhone').value
+      })
+    });
+    const cType = res.headers.get('content-type') || '';
+    if (!cType.includes('application/json')) {
+      throw new Error('AI স্টোরিবোর্ড সার্ভার এখানে চালু নেই (স্ট্যাটিক হোস্টিং)। ফ্রি ৮টি প্রো টেমপ্লেট সরাসরি ব্যবহার করুন!');
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'AI script error');
+    if (Array.isArray(data.scenes) && data.scenes.length) {
+      pushUndo();
+      scenes = data.scenes.map((s, idx) => mkScene({
+        name: s.name || `0${idx + 1} · Scene`,
+        dur: Number(s.dur) || 5,
+        kicker: s.kicker || '',
+        headline: s.headline || '',
+        sub: s.sub || '',
+        cta: s.cta || '',
+        anim: ['rise', 'slide', 'pop', 'wordpop', 'type', 'blur', 'glitch'].includes(s.anim) ? s.anim : 'rise',
+        trans: ['fade', 'wipe', 'zoom', 'flash', 'curtain'].includes(s.trans) ? s.trans : 'fade',
+        bg1: /^#[0-9a-f]{6}$/i.test(s.bg1) ? s.bg1 : COLOR_PRESETS[idx % COLOR_PRESETS.length].bg1,
+        bg2: /^#[0-9a-f]{6}$/i.test(s.bg2) ? s.bg2 : COLOR_PRESETS[idx % COLOR_PRESETS.length].bg2,
+        accent: /^#[0-9a-f]{6}$/i.test(s.accent) ? s.accent : COLOR_PRESETS[idx % COLOR_PRESETS.length].acc
+      }));
+      document.getElementById('aiTtsText').value = data.scenes.map(s => s.voiceText || s.headline).join(' ');
+      activeSceneIdx = 0; currentTime = 0.8;
+      syncEditorFromScene(); rebuildTimeline(); renderOnce();
+      st.textContent = '✅ AI স্টোরিবোর্ড ও ভয়েস স্ক্রিপ্ট টাইমলাইনে লোড হয়েছে!';
+      setTimeout(() => closeModal('libraryModal'), 700);
+    }
+  } catch (err) {
+    st.textContent = `⚠️ ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Playback & Transport
+function togglePlay() {
+  if (recording) return;
+  if (playing) {
+    playing = false; cancelAnimationFrame(rafId); stopPlaybackAudio();
+    scenes.forEach(s => { if (s.mediaType === 'video' && s.media) try { s.media.pause(); } catch (_) {} });
+    document.getElementById('btnPlay').textContent = '▶ Play';
+    return;
+  }
+  playing = true;
+  if (currentTime >= totalDuration() - 0.05) currentTime = 0;
+  lastTick = performance.now();
+  startPlaybackAudio(null, currentTime);
+  scenes.forEach(s => { if (s.mediaType === 'video' && s.media) try { s.media.play(); } catch (_) {} });
+  document.getElementById('btnPlay').textContent = '⏸ Pause';
+
+  const tick = now => {
+    if (!playing) return;
+    currentTime += (now - lastTick) / 1000;
+    lastTick = now;
+    const tot = totalDuration();
+    if (currentTime >= tot) {
+      if (loopPlay) { currentTime = 0; stopPlaybackAudio(); startPlaybackAudio(null, 0); }
+      else { currentTime = tot; renderOnce(); togglePlay(); return; }
+    }
+    renderOnce();
+    rafId = requestAnimationFrame(tick);
+  };
+  rafId = requestAnimationFrame(tick);
+}
+
+function seekTo(sec) {
+  currentTime = Math.max(0, Math.min(totalDuration(), sec));
+  const hit = sceneAtTime(currentTime);
+  if (hit.index !== activeSceneIdx) { activeSceneIdx = hit.index; syncEditorFromScene(); rebuildTimeline(); }
+  renderOnce();
+}
+function nextScene() { selectScene((activeSceneIdx + 1) % scenes.length); }
+function toggleLoop() { loopPlay = !loopPlay; document.getElementById('btnLoop').textContent = loopPlay ? 'Loop: On' : 'Loop: Off'; }
+function toggleSafeZone() { showSafeZone = !showSafeZone; document.getElementById('btnSafe').textContent = showSafeZone ? 'Safe Zone: On' : 'Safe Zone: Off'; renderOnce(); }
+
+// Project Save / Load + Thumbnail + Export
+function saveProjectLocal() {
+  const payload = {
+    scenes: scenes.map(s => ({ ...s, media: null, mediaType: null })),
+    brandEn: document.getElementById('gBrandEn').value,
+    brandBn: document.getElementById('gBrandBn').value,
+    phone: document.getElementById('gPhone').value,
+    ratio: aspectRatio
+  };
+  localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(payload));
+  document.getElementById('saveStatus').textContent = '✅ প্রজেক্ট ব্রাউজারে সেভ হয়েছে!';
+}
+function loadProjectLocal() {
+  const raw = localStorage.getItem(PROJECT_STORAGE_KEY);
+  if (!raw) { document.getElementById('saveStatus').textContent = 'কোনো সেভ করা প্রজেক্ট পাওয়া যায়নি।'; return; }
+  try {
+    const p = JSON.parse(raw);
+    if (Array.isArray(p.scenes) && p.scenes.length) {
+      pushUndo();
+      scenes = p.scenes.map(mkScene);
+      if (p.brandEn) document.getElementById('gBrandEn').value = p.brandEn;
+      if (p.brandBn) document.getElementById('gBrandBn').value = p.brandBn;
+      if (p.phone) document.getElementById('gPhone').value = p.phone;
+      if (p.ratio) setRatio(p.ratio);
+      activeSceneIdx = 0; syncEditorFromScene(); rebuildTimeline(); renderOnce();
+      document.getElementById('saveStatus').textContent = '📂 প্রজেক্ট রিস্টোর হয়েছে!';
+    }
+  } catch (_) {}
+}
+
+function downloadThumbnail() {
+  const wasSafe = showSafeZone; showSafeZone = false;
+  applyCanvasDimensions(1);
+  drawFrame(currentTime);
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `${(document.getElementById('gBrandEn').value || 'Ads-Park-BD').replace(/\s+/g, '-')}-Cover.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  showSafeZone = wasSafe;
+  applyCanvasDimensions(previewScale);
+  renderOnce();
+}
+
+function goBackToMainApp() {
+  if (location.pathname.includes('/public/')) location.assign('../index.html');
+  else location.assign('./index.html');
+}
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function updateExportMeta() {
+  if (recording) return;
+  const expScale = Number(document.getElementById('expResScale')?.value || 0.6667);
+  const w = Math.round(logicalW * expScale), h = Math.round(logicalH * expScale);
+  document.getElementById('expStatus').textContent = `মোট দৈর্ঘ্য: ${totalDuration().toFixed(1)}s (${w}x${h}) — প্রস্তুত`;
+}
+function openExportModal() {
+  document.getElementById('expProgBar').style.width = '0%';
+  updateExportMeta();
+  openModal('exportModal');
+}
+
+function switchLibTab(tab) {
+  ['tpl', 'ai', 'online'].forEach(k => {
+    document.getElementById('libPanel' + k[0].toUpperCase() + k.slice(1)).style.display = k === tab ? (k === 'tpl' ? 'grid' : 'flex') : 'none';
+    document.getElementById('libTab' + k[0].toUpperCase() + k.slice(1)).classList.toggle('active', k === tab);
+  });
+}
+
+function buildLibraryGrid() {
+  document.getElementById('libPanelTpl').innerHTML = TEMPLATE_META.map(t => `
+    <button type="button" class="tpl-card" onclick="loadTemplate('${t.id}')">
+      <div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${t.title}</div>
+        <div style="font-size:11.5px;color:var(--muted);white-space:normal">${t.desc}</div>
+      </div>
+      <div class="mono" style="font-size:10.5px;color:#60a5fa">${t.badge} · ১-ক্লিকে ব্যবহার করুন</div>
+    </button>
+  `).join('');
+}
+
+async function renderOfflineAudioMix(totSec) {
+  const mode = document.getElementById('gAudioMode').value;
+  const hasVoice = Boolean(voiceBuf);
+  if (!hasVoice && mode === 'mute') return null;
+  const sampleRate = 48000;
+  const frameCount = Math.max(sampleRate, Math.ceil(totSec * sampleRate));
+  const off = new OfflineAudioContext(2, frameCount, sampleRate);
+
+  const autoDuck = document.getElementById('gAutoDuck').checked && hasVoice;
+  const musBase = (Number(document.getElementById('gVol').value) / 100) * (autoDuck ? 0.16 : 0.45);
+
+  if (hasVoice) {
+    const vGain = off.createGain();
+    vGain.gain.value = Number(document.getElementById('voVol').value) / 100;
+    const bass = off.createBiquadFilter();
+    bass.type = 'lowshelf'; bass.frequency.value = 180; bass.gain.value = Number(document.getElementById('voBass').value);
+    const clarity = off.createBiquadFilter();
+    clarity.type = 'highshelf'; clarity.frequency.value = 3200; clarity.gain.value = Number(document.getElementById('voClarity').value);
+    const comp = off.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.ratio.value = 4;
+    const vSrc = off.createBufferSource();
+    vSrc.buffer = voiceBuf;
+    vSrc.playbackRate.value = Number(document.getElementById('voRate').value) || 1;
+    vSrc.connect(bass); bass.connect(clarity); clarity.connect(comp); comp.connect(vGain); vGain.connect(off.destination);
+    vSrc.start(0);
+  }
+
+  if (mode !== 'mute') {
+    const mGain = off.createGain();
+    mGain.gain.value = musBase;
+    mGain.connect(off.destination);
+    if (mode === 'custom' && customMusicBuf) {
+      const mSrc = off.createBufferSource();
+      mSrc.buffer = customMusicBuf;
+      mSrc.loop = true;
+      mSrc.connect(mGain);
+      mSrc.start(0);
+    } else {
+      const scales = {
+        upbeat: [261.63, 329.63, 392.0, 523.25, 392.0, 329.63, 293.66, 392.0],
+        pulse: [196.0, 246.94, 293.66, 392.0, 293.66, 246.94, 220.0, 293.66],
+        ambient: [261.63, 329.63, 392.0, 493.88]
+      };
+      const notes = scales[mode] || scales.upbeat;
+      const stepSec = (mode === 'ambient' ? 900 : mode === 'pulse' ? 320 : 370) / 1000;
+      for (let t = 0, step = 0; t < totSec; t += stepSec, step++) {
+        const osc = off.createOscillator(), g = off.createGain();
+        osc.type = mode === 'ambient' ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(notes[step % notes.length], t);
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.exponentialRampToValueAtTime(0.32, t + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, Math.min(totSec, t + stepSec));
+        osc.connect(g); g.connect(mGain); osc.start(t); osc.stop(t + stepSec + 0.03);
+        if (mode !== 'ambient' && step % 2 === 0) {
+          const kick = off.createOscillator(), kg = off.createGain();
+          kick.type = 'sine'; kick.frequency.setValueAtTime(125, t); kick.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+          kg.gain.setValueAtTime(0.55, t); kg.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+          kick.connect(kg); kg.connect(mGain); kick.start(t); kick.stop(t + 0.18);
+        }
+      }
+    }
+  }
+  return await off.startRendering();
+}
+
+async function exportMp4Fast(expScale, fps, bps, tot) {
+  if (typeof VideoEncoder === 'undefined' || typeof Mp4Muxer === 'undefined') return false;
+  applyCanvasDimensions(expScale);
+  const w = canvas.width & ~1, h = canvas.height & ~1;
+  if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; }
+
+  const avcCodecs = ['avc1.4d002a', 'avc1.42001f', 'avc1.42E01E'];
+  let chosenVideoCfg = null;
+  for (const codec of avcCodecs) {
+    try {
+      const sup = await VideoEncoder.isConfigSupported({ codec, width: w, height: h, bitrate: bps, framerate: fps });
+      if (sup?.supported) { chosenVideoCfg = sup.config; break; }
+    } catch (_) {}
+  }
+  if (!chosenVideoCfg) return false;
+
+  document.getElementById('expStatus').textContent = '🎵 অডিও মিক্স প্রস্তুত হচ্ছে...';
+  const audioBuffer = await renderOfflineAudioMix(tot).catch(() => null);
+  let useAudio = false;
+  if (audioBuffer && typeof AudioEncoder !== 'undefined') {
+    try {
+      const aSup = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: audioBuffer.sampleRate, numberOfChannels: audioBuffer.numberOfChannels, bitrate: 128000 });
+      useAudio = Boolean(aSup?.supported);
+    } catch (_) {}
+  }
+
+  const muxer = new Mp4Muxer.Muxer({
+    target: new Mp4Muxer.ArrayBufferTarget(),
+    video: { codec: 'avc', width: w, height: h },
+    ...(useAudio ? { audio: { codec: 'aac', sampleRate: audioBuffer.sampleRate, numberOfChannels: audioBuffer.numberOfChannels } } : {}),
+    fastStart: 'in-memory',
+    firstTimestampBehavior: 'offset'
+  });
+
+  let encError = null;
+  const vEncoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: err => { encError = err; }
+  });
+  vEncoder.configure(chosenVideoCfg);
+
+  let aEncoder = null;
+  if (useAudio) {
+    aEncoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: err => { encError = err; }
+    });
+    aEncoder.configure({ codec: 'mp4a.40.2', sampleRate: audioBuffer.sampleRate, numberOfChannels: audioBuffer.numberOfChannels, bitrate: 128000 });
+  }
+
+  const totalFrames = Math.max(1, Math.ceil(tot * fps));
+  const frameDurUs = Math.round(1_000_000 / fps);
+  for (let i = 0; i < totalFrames; i++) {
+    if (encError) throw encError;
+    const t = Math.min(tot - 0.005, i / fps);
+    currentTime = t;
+    drawFrame(t);
+    updatePlayhead();
+    const frame = new VideoFrame(canvas, { timestamp: i * frameDurUs, duration: frameDurUs });
+    vEncoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+    frame.close();
+    if (i % 4 === 0 || i === totalFrames - 1) {
+      const pct = Math.round(((i + 1) / totalFrames) * (useAudio ? 88 : 98));
+      document.getElementById('expProgBar').style.width = pct + '%';
+      document.getElementById('expStatus').textContent = `⚡ MP4 (H.264) রেন্ডার হচ্ছে: ${pct}% (${i + 1}/${totalFrames} ফ্রেম)`;
+      if (vEncoder.encodeQueueSize > 8) await vEncoder.flush();
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  await vEncoder.flush();
+  vEncoder.close();
+
+  if (useAudio && aEncoder && audioBuffer) {
+    document.getElementById('expStatus').textContent = '🎵 AAC অডিও এনকোড হচ্ছে...';
+    const ch = audioBuffer.numberOfChannels, sr = audioBuffer.sampleRate, len = audioBuffer.length;
+    const chunkSamples = 4096;
+    for (let off = 0; off < len; off += chunkSamples) {
+      const frames = Math.min(chunkSamples, len - off);
+      const planar = new Float32Array(frames * ch);
+      for (let c = 0; c < ch; c++) {
+        planar.set(audioBuffer.getChannelData(c).subarray(off, off + frames), c * frames);
+      }
+      const ad = new AudioData({
+        format: 'f32-planar',
+        sampleRate: sr,
+        numberOfFrames: frames,
+        numberOfChannels: ch,
+        timestamp: Math.round((off / sr) * 1_000_000),
+        data: planar
+      });
+      aEncoder.encode(ad);
+      ad.close();
+    }
+    await aEncoder.flush();
+    aEncoder.close();
+  }
+
+  muxer.finalize();
+  const { buffer } = muxer.target;
+  const blob = new Blob([buffer], { type: 'video/mp4' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(document.getElementById('gBrandEn').value.trim() || 'Ads-Park-BD').replace(/\s+/g, '-')}-${aspectRatio.replace(':', 'x')}.mp4`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  document.getElementById('expProgBar').style.width = '100%';
+  document.getElementById('expStatus').textContent = '✅ প্রিমিয়াম MP4 (H.264) ভিডিও সফলভাবে রেন্ডার ও ডাউনলোড হয়েছে!';
+  return true;
+}
+
+async function startVideoExport() {
+  if (recording) return;
+  if (playing) togglePlay();
+  recording = true;
+  const btn = document.getElementById('btnStartExport'); btn.disabled = true;
+
+  const fmt = document.getElementById('expFormat')?.value || 'mp4';
+  const expScale = Number(document.getElementById('expResScale')?.value || 0.6667);
+  const fps = Math.min(30, Number(document.getElementById('gFps').value) || 30);
+  const bps = Number(document.getElementById('expBitrate').value) || 4500000;
+  const tot = totalDuration();
+
+  if (fmt === 'mp4') {
+    try {
+      const done = await exportMp4Fast(expScale, fps, bps, tot);
+      if (done) {
+        recording = false; btn.disabled = false;
+        applyCanvasDimensions(previewScale); renderOnce();
+        return;
+      }
+    } catch (_) {}
+  }
+
+  if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+    recording = false; btn.disabled = false;
+    document.getElementById('expStatus').textContent = 'এই ব্রাউজার MediaRecorder/WebCodecs সাপোর্ট করে না — অনুগ্রহ করে Chrome বা Edge ব্যবহার করুন।';
+    return;
+  }
+
+  applyCanvasDimensions(expScale);
+  const stream = canvas.captureStream(fps);
+  scenes.forEach(s => { if (s.mediaType === 'video' && s.media) try { s.media.currentTime = 0; s.media.play(); } catch (_) {} });
+
+  try {
+    ensureAudio();
+    const dest = audioCtx.createMediaStreamDestination();
+    startPlaybackAudio(dest, 0);
+    dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
+  } catch (_) {}
+
+  const mp4Mimes = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
+  const webmMimes = expScale < 1
+    ? ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm']
+    : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const codecList = fmt === 'mp4' ? [...mp4Mimes, ...webmMimes] : webmMimes;
+  const mime = codecList.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const isMp4Out = mime.includes('mp4');
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  rec.onstop = () => {
+    stopPlaybackAudio();
+    scenes.forEach(s => { if (s.mediaType === 'video' && s.media) try { s.media.pause(); } catch (_) {} });
+    recording = false; btn.disabled = false;
+    applyCanvasDimensions(previewScale);
+    renderOnce();
+    const blob = new Blob(chunks, { type: mime || (isMp4Out ? 'video/mp4' : 'video/webm') });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(document.getElementById('gBrandEn').value.trim() || 'Ads-Park-BD').replace(/\s+/g, '-')}-${aspectRatio.replace(':', 'x')}.${isMp4Out ? 'mp4' : 'webm'}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    document.getElementById('expProgBar').style.width = '100%';
+    document.getElementById('expStatus').textContent = `✅ HD ${isMp4Out ? 'MP4' : 'WebM'} ভিডিও সফলভাবে রেন্ডার ও ডাউনলোড হয়েছে!`;
+  };
+
+  rec.start(250);
+  const t0 = performance.now();
+  const loop = now => {
+    const el = (now - t0) / 1000;
+    if (el >= tot) {
+      drawFrame(tot - 0.01);
+      document.getElementById('expProgBar').style.width = '100%';
+      setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 180);
+      return;
+    }
+    currentTime = el; drawFrame(el); updatePlayhead();
+    const pct = Math.round((el / tot) * 100);
+    document.getElementById('expProgBar').style.width = pct + '%';
+    document.getElementById('expStatus').textContent = `রেন্ডার হচ্ছে: ${pct}% (${el.toFixed(1)}s / ${tot.toFixed(1)}s)`;
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+// Mark cached config dirty whenever inspector inputs change
+document.querySelectorAll('.inspector input, .inspector select').forEach(el => {
+  el.addEventListener('input', markConfigDirty);
+  el.addEventListener('change', markConfigDirty);
+});
+
+// Init
+applyCanvasDimensions(previewScale);
+buildSwatches();
+buildLibraryGrid();
+syncEditorFromScene();
+rebuildTimeline();
+window.addEventListener('resize', () => { measureLaneCache(); updatePlayhead(); drawAudioLanes(); });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { wrapCache.clear(); renderOnce(); }); else renderOnce();
+</script>
+</body>
+</html>
